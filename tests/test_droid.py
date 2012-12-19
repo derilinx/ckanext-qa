@@ -84,19 +84,23 @@ class TestSignatureInterpreter(object):
         signature_interpreter = SignatureInterpreter({}, log)
         assert_equal(None, signature_interpreter.determine_format("foo", "foo"))
 
-    def hid_test_signature_interpreter_returns_text_for_json_(self):
-        Formats.by_display_name()['TXT']
-
-    def test_sniff_format_from_signature_and_filepath(self):
+    def test_sniff_format_ole_with_xlsx_extension_in_filename(self):
         signature_interpreter = SignatureInterpreter({u'fmt/111':
                         {'extensions': [],
                          'puid': u'fmt/111',
                          'display_name': u'OLE2 Compound Document Format', 
                          'mime_type': ''}}, log)
-        format_ = signature_interpreter.format_from_filename(u'fmt/111', "foo.xlsx")
-        assert_equal('XLS', format_["display_name"])
         format_ = signature_interpreter.determine_format(u'fmt/111', "foo.xlsx")
         assert_equal('XLS', format_["display_name"])
+
+    def test_sniff_format_ole_with_no_clue_in_extension(self):
+        signature_interpreter = SignatureInterpreter({u'fmt/111':
+                        {'extensions': [],
+                         'puid': u'fmt/111',
+                         'display_name': u'OLE2 Compound Document Format', 
+                         'mime_type': ''}}, log)
+        format_ = signature_interpreter.determine_format(u'fmt/111', "foo.bar")
+        assert_equal('DOC', format_["display_name"])
 
     def test_sniff_microsoft(self):
         signature_interpreter = SignatureInterpreter({u'fmt/220':

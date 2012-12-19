@@ -109,9 +109,8 @@ class SignatureInterpreter(object):
             self.log.debug("found signature for puid %s:\n%s" % (puid, signature)) 
             format_ = self.format_from_signature_extension(puid)
             if not format_:
-                format_ = self.determine_Microsoft_format(puid)
-            if not format_:
-                format_ = self.format_from_filename(puid, filepath)
+                format_ = self.determine_Microsoft_format(puid, filepath)
+            
         return format_
 
     def signature_for_puid(self, puid):
@@ -131,7 +130,7 @@ class SignatureInterpreter(object):
                 return True
         return False
 
-    def determine_Microsoft_format(self, puid):
+    def determine_Microsoft_format(self, puid, filepath):
         signature = self.signature_for_puid(puid)
         if "Microsoft" in signature['display_name']:
             # indicates some kind of MS office format
@@ -141,17 +140,18 @@ class SignatureInterpreter(object):
                 return Formats.by_display_name()["DOC"]
             elif self._name_contains(signature, ["Powerpoint", "PowerPoint"]):
                 return Formats.by_display_name()["PPT"]
-        return None
-
-    def format_from_filename(self, puid, filepath):
+        # OLE documents don't have Microsoft in the display_name
         if puid in [u'fmt/111']:
             _, file_extension = os.path.splitext(filepath)
             format_ = Formats.by_extension().get(file_extension[1:]) # remove leading "."
             if format_ and format_["display_name"] in ['PPT', 'XLS', 'DOC']:
-                self.log.info("identified MS office format from filename %s" % format_["display_name"])
+                self.log.info("OLE document: identified exact format from file extension %s" % format_["display_name"])
                 return format_
+            # it's some kind of office document, can't tell exactly which
+            return Formats.by_display_name()["DOC"]
         self.log.debug("no Format found for signature %s" % puid)
         return None
+
 
 def get_signatures(signature_file):
     """Signatures files are provided by the National Archive
