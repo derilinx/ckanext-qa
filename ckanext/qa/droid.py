@@ -9,8 +9,8 @@ DROID_INSTALL_DIR = "/home/emily/devtools/droid"
 DROID_SIGNATURE_FILE = "/home/emily/.droid6/signature_files/DROID_SignatureFile_V65.xml"
 DROID_CONTAINER_SIGNATURE_FILE = "/home/emily/.droid6/container_sigs/container-signature-20120828.xml"
 
-def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR, 
-                            signature_file=DROID_SIGNATURE_FILE, 
+def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
+                            signature_file=DROID_SIGNATURE_FILE,
                             container_signature_file=DROID_CONTAINER_SIGNATURE_FILE):
     """This is a factory method for constructing a DroidFileSniffer """
     
@@ -57,8 +57,8 @@ class DroidFileSniffer(object):
   
 class DroidWrapper(object):
     """This class is responsible for calling the Droid executable and 
-        interpreting the results """      
-    def __init__(self, droid_install_dir, signature_file, 
+        interpreting the results """  
+    def __init__(self, droid_install_dir, signature_file,
                     container_signature_file, log):
         self.droid_install_dir = droid_install_dir
         self.signature_file = signature_file
@@ -66,11 +66,12 @@ class DroidWrapper(object):
         self.log = log
  
     def run_droid_on_folder(self, folder):
-        args = ["-Nr", folder, 
-                "-Ns", self.signature_file, 
+        args = ["-Nr", folder,
+                "-Ns", self.signature_file,
                 "-Nc", self.container_signature_file]
-        p = subprocess.Popen(["java", "-Xmx512m", "-jar", 
-                "%s/droid-command-line-6.1.jar" % self.droid_install_dir] + args, 
+        p = subprocess.Popen(["java", "-Xmx512m", "-jar",
+                "%s/droid-command-line-6.1.jar" % self.droid_install_dir]\
+                     + args, 
                 stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     
         errors = p.stderr.read()
@@ -83,8 +84,8 @@ class DroidWrapper(object):
             fields = line.split(",")
             if len(fields) > 1:
                 filename = fields[0]
-                f = fields[1]
-                results[filename] = f
+                puid = fields[1]
+                results[filename] = puid
         if not results:
             self.log.error("Droid did not give any results. stdout:\n%s\nstderr:\n%s" % (output, errors))
         return results
@@ -126,7 +127,6 @@ http://www.nationalarchives.gov.uk/aboutapps/pronom/droid-signature-files.htm
         puid = format_.getAttribute("PUID")
         signatures[puid] = {"display_name" : format_.getAttribute("Name"),
                             "mime_type" : format_.getAttribute("MIMEType"),
-                            "extension" : extensions[0] if len(extensions) > 0 else "",
                             "extensions" : extensions,
                             "puid" : puid}
     return signatures
