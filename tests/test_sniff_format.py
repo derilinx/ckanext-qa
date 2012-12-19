@@ -3,7 +3,7 @@ import logging
 
 from nose.tools import raises, assert_equal
 
-from ckanext.qa.sniff_format import sniff_file_format, is_json
+from ckanext.qa.sniff_format import sniff_file_format
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('sniff')
@@ -131,29 +131,4 @@ class TestSniffFormat:
         self.check_format('doc', 'foi-bis-quarterly-publications-may-july-2010-special-advisers.doc')
 
 
-def test_is_json():
-    assert is_json('5', log)
-    assert is_json('-5', log)
-    assert is_json('-5.4', log)
-    assert is_json('-5.4e5', log)
-    assert is_json('-5.4e-5', log)
-    assert not is_json('4.', log)
-    assert is_json('"hello"', log)
-    assert not is_json('hello"', log)
-    assert is_json('["hello"]', log)
-    assert not is_json('"hello"]', log)
-    assert is_json('[5]', log)
-    assert is_json('[5, 6]', log)
-    assert is_json('[5,6]', log)
-    assert is_json('["cat", 6]', log)
-    assert is_json('{"cat": 6}', log)
-    assert is_json('{"cat":6}', log)
-    assert is_json('{"cat": "bob"}', log)
-    assert is_json('{"cat": [1, 2]}', log)
-    assert is_json('{"cat": [1, 2], "dog": 5, "rabbit": "great"}', log)
-    assert not is_json('{"cat": [1, 2}]', log)
-    assert is_json('[{"cat": [1]}, 2]', log)
-
-    # false positives of the algorithm:
-    #assert not is_json('[{"cat": [1]}2, 2]', log)
 
