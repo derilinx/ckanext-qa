@@ -12,7 +12,36 @@ import messytables
 
 from ckanext.dgu.lib.formats import Formats
 
+from droid import droid_file_sniffer
+
+# store global reference so we can take advantage of the caching it does
+droid = None
+    
 def sniff_file_format(filepath, log):
+    global droid
+    if not droid:
+        droid = droid_file_sniffer(log)
+    if not droid:
+        return old_sniff_file_format(filepath, log)
+
+    format_ = droid.sniff_format(filepath)
+    log.info("format determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
+
+    if format_ == Formats.by_extension()['xml']:
+        with open(filepath) as f:
+                buf = f.read(500)
+        format_ = get_xml_variant(buf, log)
+
+    if format_ == Formats.by_extension()['html']:
+        # maybe it has RDFa in it
+        with open(filepath) as f:
+            buf = f.read(100000)
+        if has_rdfa(buf, log):
+            format_ = Formats.by_display_name()['RDFa']
+
+    return format_ or old_sniff_file_format(filepath, log)
+
+def old_sniff_file_format(filepath, log):
     '''For a given filepath, work out what file format it is.
     Returns Format dict e.g. {'display_name': 'CSV', ...}
     or None if it can\'t tell what it is.
