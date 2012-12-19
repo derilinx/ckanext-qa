@@ -9,10 +9,16 @@ DROID_INSTALL_DIR = "/home/emily/devtools/droid"
 DROID_SIGNATURE_FILE = "/home/emily/.droid6/signature_files/DROID_SignatureFile_V65.xml"
 DROID_CONTAINER_SIGNATURE_FILE = "/home/emily/.droid6/container_sigs/container-signature-20120828.xml"
 
-def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR, signature_file=DROID_SIGNATURE_FILE, container_signature_file=DROID_CONTAINER_SIGNATURE_FILE):
+def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR, 
+                            signature_file=DROID_SIGNATURE_FILE, 
+                            container_signature_file=DROID_CONTAINER_SIGNATURE_FILE):
     """This is a factory method for constructing a DroidFileSniffer """
     
-    droid = DroidWrapper(droid_install_dir, signature_file, container_signature_file, log)
+    # If Droid is not installed, we can't make one
+    if not os.path.exists(DROID_INSTALL_DIR):
+        return None
+    droid = DroidWrapper(droid_install_dir, signature_file, 
+                            container_signature_file, log)
     signatures = SignatureInterpreter(get_signatures(signature_file), log)
     return DroidFileSniffer(droid, signatures)
 
@@ -22,7 +28,8 @@ class DroidFileSniffer(object):
     def __init__(self, droid, signature_interpreter):
         self.droid = droid
         self.signature_interpreter = signature_interpreter
-        # this cache won't often hit, since most files we sniff are in different folders
+        # this cache won't often hit, since most files we sniff are in 
+        # different folders
         # but it costs very little and will save a lot of time when it does
         self.results_cache = {}
 
@@ -49,16 +56,22 @@ class DroidFileSniffer(object):
         return format_
   
 class DroidWrapper(object):
-    """This class is responsible for calling the Droid executable and interpreting the results """      
-    def __init__(self, droid_install_dir, signature_file, container_signature_file, log):
+    """This class is responsible for calling the Droid executable and 
+        interpreting the results """      
+    def __init__(self, droid_install_dir, signature_file, 
+                    container_signature_file, log):
         self.droid_install_dir = droid_install_dir
         self.signature_file = signature_file
         self.container_signature_file = container_signature_file
         self.log = log
  
     def run_droid_on_folder(self, folder):
-        args = ["-Nr", folder, "-Ns", self.signature_file, "-Nc", self.container_signature_file]
-        p = subprocess.Popen(["java", "-Xmx512m", "-jar", "%s/droid-command-line-6.1.jar" % self.droid_install_dir] + args, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        args = ["-Nr", folder, 
+                "-Ns", self.signature_file, 
+                "-Nc", self.container_signature_file]
+        p = subprocess.Popen(["java", "-Xmx512m", "-jar", 
+                "%s/droid-command-line-6.1.jar" % self.droid_install_dir] + args, 
+                stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     
         errors = p.stderr.read()
         output = p.stdout.read()
@@ -86,7 +99,6 @@ class SignatureInterpreter(object):
     def format_from_puid(self, puid):
         signature = self._signatures.get(puid)
         if signature:
-            formats = set()
             for ext in signature["extensions"]:
                 format_ = Formats.by_extension().get(ext)
                 if format_:
