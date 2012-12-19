@@ -3,10 +3,10 @@ import logging
 
 from nose.tools import raises, assert_equal
 
-from ckanext.qa.sniff_format import sniff_file_format
+from ckanext.qa.old_sniff_format import old_sniff_file_format, is_json
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger('sniff')
+log = logging.getLogger('old_sniff')
 
 class TestSniffFormat:
     @classmethod
@@ -21,7 +21,7 @@ class TestSniffFormat:
 
     def test_all(self):
         for format_, filepath in self.fixture_files:
-            sniffed_format = sniff_file_format(filepath, log)
+            sniffed_format = old_sniff_file_format(filepath, log)
             print 'Testing %s %s' % (format_, filepath)
             assert sniffed_format, format_
             assert_equal(sniffed_format['extension'] or \
@@ -40,7 +40,7 @@ class TestSniffFormat:
                     break
         else:
             assert 0, format #Could not find fixture for format
-        sniffed_format = sniff_file_format(filepath, log)
+        sniffed_format = old_sniff_file_format(filepath, log)
         assert sniffed_format, format_
         assert_equal(sniffed_format['extension'] or \
                      sniffed_format['display_name'].lower(), format_)
@@ -131,4 +131,29 @@ class TestSniffFormat:
         self.check_format('doc', 'foi-bis-quarterly-publications-may-july-2010-special-advisers.doc')
 
 
+def test_is_json():
+    assert is_json('5', log)
+    assert is_json('-5', log)
+    assert is_json('-5.4', log)
+    assert is_json('-5.4e5', log)
+    assert is_json('-5.4e-5', log)
+    assert not is_json('4.', log)
+    assert is_json('"hello"', log)
+    assert not is_json('hello"', log)
+    assert is_json('["hello"]', log)
+    assert not is_json('"hello"]', log)
+    assert is_json('[5]', log)
+    assert is_json('[5, 6]', log)
+    assert is_json('[5,6]', log)
+    assert is_json('["cat", 6]', log)
+    assert is_json('{"cat": 6}', log)
+    assert is_json('{"cat":6}', log)
+    assert is_json('{"cat": "bob"}', log)
+    assert is_json('{"cat": [1, 2]}', log)
+    assert is_json('{"cat": [1, 2], "dog": 5, "rabbit": "great"}', log)
+    assert not is_json('{"cat": [1, 2}]', log)
+    assert is_json('[{"cat": [1]}, 2]', log)
+
+    # false positives of the algorithm:
+    #assert not is_json('[{"cat": [1]}2, 2]', log)
 
