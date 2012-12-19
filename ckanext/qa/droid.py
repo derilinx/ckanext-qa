@@ -20,12 +20,13 @@ def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
     droid = DroidWrapper(droid_install_dir, signature_file, 
                             container_signature_file, log)
     signatures = SignatureInterpreter(get_signatures(signature_file), log)
-    return DroidFileSniffer(droid, signatures)
+    return DroidFileSniffer(droid, signatures, log)
 
 class DroidFileSniffer(object):
     """This class can find what format Droid things a file has, and convert that
     to a Format instance using a SignatureInterpreter class """
-    def __init__(self, droid, signature_interpreter):
+    def __init__(self, droid, signature_interpreter, log):
+        self.log = log
         self.droid = droid
         self.signature_interpreter = signature_interpreter
         # this cache won't often hit, since most files we sniff are in 
@@ -35,26 +36,30 @@ class DroidFileSniffer(object):
 
     def puid_of_file(self, filepath):
         if self.results_cache.has_key(filepath):
+            self.log.info("found cached result for file %s" % filepath) 
             return self.results_cache[filepath]
 
         folder = os.path.dirname(filepath)
         results = self.droid.run_droid_on_folder(folder)
-
         self.results_cache.update(results)
+
+        if not results.has_key(filepath):
+            self.log.info("droid didn't find file %s in results, only have %s" % (filepath, results))
         return results.get(filepath)
 
     def sniff_format(self, filepath):
         puid = self.puid_of_file(filepath)
         if not puid:
             return None
-        format_ = self.signature_interpreter.format_from_puid(puid)
-        
+        format_ = self.signature_interpreter.determine_format(puid, filepath)
+
         # droid can't be trusted to correctly recognize these formats
         badly_recognized_extensions = ['zip']#["wms", "rss", "iati", "rdf", "xml", "zip", "html"]
         if format_ and format_["extension"] in badly_recognized_extensions:
+            self.log.info("droid identified file as %s, which may be wrong so returning None" % format_["display_name"])
             return None
         return format_
-  
+
 class DroidWrapper(object):
     """This class is responsible for calling the Droid executable and 
         interpreting the results """  
@@ -97,16 +102,56 @@ class SignatureInterpreter(object):
         self._signatures = signatures
         self.log = log
 
-    def format_from_puid(self, puid):
-        signature = self._signatures.get(puid)
+    def determine_format(self, puid, filepath):
+        format_ = None
+        signature = self.signature_for_puid(puid)
         if signature:
-            for ext in signature["extensions"]:
-                format_ = Formats.by_extension().get(ext)
-                if format_:
-                    return format_
-        self.log.debug("no Format found for puid %s" % puid)
+            self.log.debug("found signature for puid %s:\n%s" % (puid, signature)) 
+            format_ = self.format_from_signature_extension(puid)
+            if not format_:
+                format_ = self.determine_Microsoft_format(puid)
+            if not format_:
+                format_ = self.format_from_filename(puid, filepath)
+        return format_
+
+    def signature_for_puid(self, puid):
+        return self._signatures.get(puid)
+
+    def format_from_signature_extension(self, puid):
+        signature = self.signature_for_puid(puid)
+        for ext in signature["extensions"]:
+            format_ = Formats.by_extension().get(ext)
+            if format_:
+                return format_
         return None
 
+    def _name_contains(self, signature, words):
+        for word in words:
+            if word in signature['display_name']:
+                return True
+        return False
+
+    def determine_Microsoft_format(self, puid):
+        signature = self.signature_for_puid(puid)
+        if "Microsoft" in signature['display_name']:
+            # indicates some kind of MS office format
+            if self._name_contains(signature, ["Spreadsheet", "Excel"]):
+                return Formats.by_display_name()["XLS"]
+            elif self._name_contains(signature, ["Word", "Document"]):
+                return Formats.by_display_name()["DOC"]
+            elif self._name_contains(signature, ["Powerpoint", "PowerPoint"]):
+                return Formats.by_display_name()["PPT"]
+        return None
+
+    def format_from_filename(self, puid, filepath):
+        if puid in [u'fmt/111']:
+            _, file_extension = os.path.splitext(filepath)
+            format_ = Formats.by_extension().get(file_extension[1:]) # remove leading "."
+            if format_ and format_["display_name"] in ['PPT', 'XLS', 'DOC']:
+                self.log.info("identified MS office format from filename %s" % format_["display_name"])
+                return format_
+        self.log.debug("no Format found for signature %s" % puid)
+        return None
 
 def get_signatures(signature_file):
     """Signatures files are provided by the National Archive
