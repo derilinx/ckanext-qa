@@ -23,8 +23,9 @@ def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
     return DroidFileSniffer(droid, signatures, log)
 
 class DroidFileSniffer(object):
-    """This class can find what format Droid things a file has, and convert that
-    to a Format instance using a SignatureInterpreter class """
+    """This class can find what format Droid thinks a file has, and convert that
+    to a Format instance. Droid expresses the format as a 'puid', which is
+    converted a Format using the SignatureInterpreter class """
     def __init__(self, droid, signature_interpreter, log):
         self.log = log
         self.droid = droid
@@ -96,7 +97,7 @@ class DroidWrapper(object):
         return results
 
 class SignatureInterpreter(object):
-    """ This class knows how to convert a particular signature to a Format. """
+    """ This class knows how to convert a particular puid to a Format """
 
     def __init__(self, signatures, log):
         self._signatures = signatures
@@ -159,10 +160,14 @@ class SignatureInterpreter(object):
 
 
 def get_signatures(signature_file):
-    """Signatures files are provided by the National Archive
-and new versions are regularly released. See:
-http://www.nationalarchives.gov.uk/aboutapps/pronom/droid-signature-files.htm
-"""
+    """Signatures files describe each file format identified by Droid.
+    It is keyed by 'puid'.
+
+    The signature file is provided by the National Archive and new
+    versions are regularly released. See:
+    http://www.nationalarchives.gov.uk/aboutapps/pronom/droid-signature-files.htm
+
+    """
     signatures = {}
     
     dom = minidom.parse(signature_file)
