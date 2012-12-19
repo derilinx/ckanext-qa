@@ -127,7 +127,8 @@ class TestSniffFormat:
         self.check_format('ics')
     def test_xlsx(self):
         self.check_format('xls', 'defra-qds-1204.xls')
-
+    def test_rtf(self):
+        self.check_format('doc', 'foi-bis-quarterly-publications-may-july-2010-special-advisers.doc')
 
 
 def test_is_json():

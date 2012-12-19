@@ -112,6 +112,16 @@ class TestSignatureInterpreter(object):
         format_ = signature_interpreter.determine_format(u'fmt/220', "foo.wks")
         assert_equal('XLS', format_["display_name"])
 
+    def test_sniff_rtf(self):
+        signature_interpreter = SignatureInterpreter({u'fmt/53':
+                        {'extensions': [u'rtf'], 
+                         'puid': u'fmt/53', 
+                         'display_name': u'Rich Text Format', 
+                         'mime_type': u'application/rtf, text/rtf'}}, log)
+        format_ = signature_interpreter.determine_format(u'fmt/53', "foo.rtf")
+        assert_equal('DOC', format_["display_name"])
+
+
 class FakeDroidWrapper(object):
     def __init__(self, results):
         self.results = results

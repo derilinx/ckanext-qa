@@ -132,6 +132,7 @@ class SignatureInterpreter(object):
 
     def determine_Microsoft_format(self, puid, filepath):
         signature = self.signature_for_puid(puid)
+
         if "Microsoft" in signature['display_name']:
             # indicates some kind of MS office format
             if self._name_contains(signature, ["Spreadsheet", "Excel"]):
@@ -140,7 +141,12 @@ class SignatureInterpreter(object):
                 return Formats.by_display_name()["DOC"]
             elif self._name_contains(signature, ["Powerpoint", "PowerPoint"]):
                 return Formats.by_display_name()["PPT"]
-        # OLE documents don't have Microsoft in the display_name
+
+        if "Rich Text Format" in signature["display_name"]:
+            # Rich Text format is compatible with Word
+            return Formats.by_display_name()["DOC"]
+
+        # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet.
         if puid in [u'fmt/111']:
             _, file_extension = os.path.splitext(filepath)
             format_ = Formats.by_extension().get(file_extension[1:]) # remove leading "."
@@ -149,7 +155,6 @@ class SignatureInterpreter(object):
                 return format_
             # it's some kind of office document, can't tell exactly which
             return Formats.by_display_name()["DOC"]
-        self.log.debug("no Format found for signature %s" % puid)
         return None
 
 
