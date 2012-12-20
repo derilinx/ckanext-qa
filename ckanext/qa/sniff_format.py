@@ -36,7 +36,7 @@ def sniff_file_format(filepath, log):
     if format_:
         return format_
         
-    log.info("Droid failed to identify file format, will look at mimetypes")
+    log.info("Droid failed to identify file format, will look at magic")
 
     magic_format = magic_sniff_format(filepath, log)
     first_part_of_file = _get_first_part_of_file(filepath)
