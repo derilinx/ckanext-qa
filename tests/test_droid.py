@@ -11,6 +11,8 @@ from ckanext.qa.droid import get_signatures, droid_file_sniffer, \
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('droid')
 
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+
 def check_for_droid_installation(func):
     from nose.plugins.skip import SkipTest
     def _(*args, **kwargs):
@@ -31,7 +33,7 @@ class TestDroidIntegration(object):
         signatures = get_signatures(DROID_SIGNATURE_FILE)
         signature_interpreter = SignatureInterpreter(signatures, log)
         puid = "fmt/215"
-        format_ = signature_interpreter.determine_format(puid, "foo.ppt")
+        format_ = signature_interpreter.determine_format(puid)
         assert_equal (Formats.by_display_name()['PPT'], format_)
 
     @check_for_droid_installation
@@ -53,17 +55,15 @@ class TestDroidIntegration(object):
     @check_for_droid_installation
     def test_find_puid_of_file(self):
         droid = droid_file_sniffer(log)
-        fixture_data_dir = os.path.join(os.path.dirname(__file__), 'data')
         
-        signature = droid.puid_of_file(os.path.join(fixture_data_dir, "August-2010.xls"))
+        signature = droid.puid_of_file(os.path.join(DATA_DIR, "August-2010.xls"))
         assert_equal("fmt/56", signature)
 
     @check_for_droid_installation
     def test_softlinks(self):
         droid = droid_file_sniffer(log)
-        fixture_data_dir = os.path.join(os.path.dirname(__file__), 'data')
-        afile = os.path.join(os.path.join(fixture_data_dir, "August-2010.xls"))
-        alink = os.path.join(os.path.join(fixture_data_dir, 'foo'))
+        afile = os.path.join(DATA_DIR, "August-2010.xls")
+        alink = os.path.join(DATA_DIR, 'foo')
         try:
             os.system("ln -s %s %s" % (afile, alink))
 
@@ -71,6 +71,34 @@ class TestDroidIntegration(object):
             assert_equal("fmt/56", signature)
         finally:
             os.remove(alink)
+
+    @check_for_droid_installation
+    def test_zip_files(self):
+        droid = droid_file_sniffer(log)
+        zip_xls_file = os.path.join(DATA_DIR, 'telephone-network-data.xls.zip')
+        signature = droid.puid_of_file(zip_xls_file)
+        assert_equal("x-fmt/263", signature) 
+        all_puids = droid.puids_of_zip_contents(zip_xls_file)
+        assert_equal(11, len(all_puids)) # 11 files in this zip
+        assert 'fmt/61' in all_puids
+        assert 'fmt/214' in all_puids
+        assert 'x-fmt/263' not in all_puids # don't want puid of original zip file
+
+    @check_for_droid_installation
+    def test_assign_format_of_zip(self):
+        puids = ['fmt/61', 'fmt/214', 'fmt/291', 'fmt/294']
+        puid_of_zip_file = 'x-fmt/263'
+        signature_interpreter = SignatureInterpreter(get_signatures(DROID_SIGNATURE_FILE), log)
+        formats = signature_interpreter.determine_formats(puids)
+        assert_equal(['XLS', 'XLS', 'ODT', 'ODS'], [format_['display_name'] for format_ in formats if format_])
+        assert_equal('ODS', signature_interpreter.highest_scoring_format(puids)['display_name'])
+
+    @check_for_droid_installation
+    def test_sniff_format_of_zip(self):
+        zip_xls_file = os.path.join(DATA_DIR, 'telephone-network-data.xls.zip')
+        droid = droid_file_sniffer(log)
+        format_ = droid.sniff_format(zip_xls_file)
+        assert_equal('XLS / Zip', format_['display_name'])
 
 class TestSignatureInterpreter(object):
 
@@ -96,7 +124,7 @@ class TestSignatureInterpreter(object):
 
     def test_signature_interpreter_returns_none_with_missing_signature(self):
         signature_interpreter = SignatureInterpreter({}, log)
-        assert_equal(None, signature_interpreter.determine_format("foo", "foo"))
+        assert_equal(None, signature_interpreter.determine_format("foo"))
 
     def test_sniff_format_ole_with_xlsx_extension_in_filename(self):
         signature_interpreter = SignatureInterpreter({u'fmt/111':
@@ -104,7 +132,7 @@ class TestSignatureInterpreter(object):
                          'puid': u'fmt/111',
                          'display_name': u'OLE2 Compound Document Format', 
                          'mime_type': ''}}, log)
-        format_ = signature_interpreter.determine_format(u'fmt/111', "foo.xlsx")
+        format_ = signature_interpreter.determine_format(u'fmt/111')
         assert_equal('XLS', format_["display_name"])
 
     def test_sniff_works_is_not_doc(self):
@@ -114,7 +142,7 @@ class TestSignatureInterpreter(object):
                          'display_name': 
                         u'Microsoft Works Spreadsheet for Windows', 
                          'mime_type': ''}}, log)
-        format_ = signature_interpreter.determine_format(u'fmt/220', "foo.wks")
+        format_ = signature_interpreter.determine_format(u'fmt/220')
         assert_equal(None, format_)
 
     def test_sniff_rtf_is_a_doc(self):
@@ -123,9 +151,23 @@ class TestSignatureInterpreter(object):
                          'puid': u'fmt/53', 
                          'display_name': u'Rich Text Format', 
                          'mime_type': u'application/rtf, text/rtf'}}, log)
-        format_ = signature_interpreter.determine_format(u'fmt/53', "foo.rtf")
+        format_ = signature_interpreter.determine_format(u'fmt/53')
         assert_equal('DOC', format_["display_name"])
 
+    def test_assign_format_of_zip_with_uknown_contents(self):
+        puids = [None, None]
+        signature_interpreter = SignatureInterpreter({}, log)
+        formats = signature_interpreter.determine_formats(puids)
+        assert_equal([None, None], formats)
+        assert_equal(None, signature_interpreter.highest_scoring_format(puids))
+
+    def test_assign_format_of_zip_with_partially_known_contents_is_not_known(self):
+        puids = [None, 'fmt/214']
+        signature_interpreter = SignatureInterpreter({'fmt/214' : {'extensions': [u'xlsx'], 'puid': u'fmt/214', 'display_name': u'Microsoft Excel for Windows', 'mime_type': ''}}, log)
+        formats = signature_interpreter.determine_formats(puids)
+        assert_equal(None, formats[0])
+        assert_equal('XLS', formats[1]['display_name'])
+        assert_equal(None, signature_interpreter.highest_scoring_format(puids))
 
 class FakeDroidWrapper(object):
     def __init__(self, results):
@@ -136,7 +178,7 @@ class FakeDroidWrapper(object):
 class FakeSignatureInterpreter(object):
     def __init__(self, format_):
         self.format_ = format_
-    def determine_format(self, puid, filepath):
+    def determine_format(self, puid):
         return self.format_ 
 
 class TestDroidFileSniffer(object):
