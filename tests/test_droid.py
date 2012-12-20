@@ -58,6 +58,20 @@ class TestDroidIntegration(object):
         signature = droid.puid_of_file(os.path.join(fixture_data_dir, "August-2010.xls"))
         assert_equal("fmt/56", signature)
 
+    @check_for_droid_installation
+    def test_softlinks(self):
+        droid = droid_file_sniffer(log)
+        fixture_data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        afile = os.path.join(os.path.join(fixture_data_dir, "August-2010.xls"))
+        alink = os.path.join(os.path.join(fixture_data_dir, 'foo'))
+        try:
+            os.system("ln -s %s %s" % (afile, alink))
+
+            signature = droid.puid_of_file(alink)
+            assert_equal("fmt/56", signature)
+        finally:
+            os.remove(alink)
+
 class TestSignatureInterpreter(object):
 
     def test_format_from_puid_with_multiple_extensions(self):

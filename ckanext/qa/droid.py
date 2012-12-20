@@ -37,7 +37,9 @@ class DroidFileSniffer(object):
     def puid_of_file(self, filepath):
         # if it's a symbolic link, droid will return the real path not the link, so work with the real path
         if os.path.islink(filepath):
+            self.log.debug("found symbolic link, will follow it to find actual file")
             filepath = os.path.realpath(filepath)
+
         if self.results_cache.has_key(filepath):
             self.log.info("found cached result for file %s" % filepath) 
             return self.results_cache[filepath]
@@ -47,7 +49,7 @@ class DroidFileSniffer(object):
         self.results_cache.update(results)
 
         if not results.has_key(filepath):
-            raise Exception("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
+            raise DroidError("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
         return results.get(filepath)
 
     def sniff_format(self, filepath):
@@ -57,6 +59,9 @@ class DroidFileSniffer(object):
         format_ = self.signature_interpreter.determine_format(puid, filepath)
 
         return format_
+
+class DroidError(Exception):
+    pass
 
 class DroidWrapper(object):
     """This class is responsible for calling the Droid executable and 
@@ -122,12 +127,6 @@ class SignatureInterpreter(object):
                 return format_
         return None
 
-    def _name_contains(self, signature, words):
-        for word in words:
-            if word in signature['display_name']:
-                return True
-        return False
-
     def determine_Microsoft_format(self, puid):
         signature = self.signature_for_puid(puid)
         if "Rich Text Format" in signature["display_name"]:
@@ -137,11 +136,10 @@ class SignatureInterpreter(object):
         # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet.
         if puid in [u'fmt/111']:
             format_ = Formats.by_display_name()["XLS"]
-            if format_ and format_["display_name"] in ['PPT', 'XLS', 'DOC']:
-                self.log.info("OLE document: guessed format %s" % format_["display_name"])
-                return format_
+            self.log.info("OLE document: guessed format %s" % format_["display_name"])
+            return format_
             # it's some kind of office document, can't tell exactly which
-            return Formats.by_display_name()["DOC"]
+            #return Formats.by_display_name()["DOC"]
         return None
 
 
