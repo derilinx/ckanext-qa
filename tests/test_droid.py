@@ -93,16 +93,7 @@ class TestSignatureInterpreter(object):
         format_ = signature_interpreter.determine_format(u'fmt/111', "foo.xlsx")
         assert_equal('XLS', format_["display_name"])
 
-    def test_sniff_format_ole_with_no_clue_in_extension(self):
-        signature_interpreter = SignatureInterpreter({u'fmt/111':
-                        {'extensions': [],
-                         'puid': u'fmt/111',
-                         'display_name': u'OLE2 Compound Document Format', 
-                         'mime_type': ''}}, log)
-        format_ = signature_interpreter.determine_format(u'fmt/111', "foo.bar")
-        assert_equal('DOC', format_["display_name"])
-
-    def test_sniff_microsoft(self):
+    def test_sniff_works_is_not_doc(self):
         signature_interpreter = SignatureInterpreter({u'fmt/220':
                         {'extensions': [u'wks'], 
                          'puid': u'fmt/220', 
@@ -110,9 +101,9 @@ class TestSignatureInterpreter(object):
                         u'Microsoft Works Spreadsheet for Windows', 
                          'mime_type': ''}}, log)
         format_ = signature_interpreter.determine_format(u'fmt/220', "foo.wks")
-        assert_equal('XLS', format_["display_name"])
+        assert_equal(None, format_)
 
-    def test_sniff_rtf(self):
+    def test_sniff_rtf_is_a_doc(self):
         signature_interpreter = SignatureInterpreter({u'fmt/53':
                         {'extensions': [u'rtf'], 
                          'puid': u'fmt/53', 
@@ -142,18 +133,21 @@ class TestDroidFileSniffer(object):
         format_ = droid.sniff_format('myfile')
         assert_equal('XLS', format_["display_name"])
 
-    def test_sniff_format_returns_none_with_unknown_signature(self):
+    def test_sniff_format_throws_an_excpetion_when_droid_results_dont_contain_file(self):
         fake_droid = FakeDroidWrapper({})
         droid = DroidFileSniffer(fake_droid, FakeSignatureInterpreter("foo"), log)
-        format_ = droid.sniff_format('myfile')
-        assert_equal(None, format_)
+        try:
+            format_ = droid.sniff_format('myfile')
+            assert False, "should have thrown an exception because droid didn't find the file"
+        except Exception, expected:
+            pass
 
-    def test_sniff_format_gives_none_with_format_it_doesnt_sniff_well(self):
+    def test_sniff_format_for_zip(self):
         fake_droid = FakeDroidWrapper({'myfile': "foo"})
         format_ = Formats.by_extension()["zip"]
         droid = DroidFileSniffer(fake_droid, FakeSignatureInterpreter(format_), log)
         format_ = droid.sniff_format('myfile')
-        assert_equal(None, format_)
+        assert_equal('Zip', format_['display_name'])
 
     def test_caching_folder_results(self):
         fake_droid = FakeDroidWrapper({'/a/path/file1': "foo", 

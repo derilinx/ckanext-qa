@@ -36,6 +36,9 @@ class DroidFileSniffer(object):
         self.results_cache = {}
 
     def puid_of_file(self, filepath):
+        # if it's a symbolic link, droid will return the real path not the link, so work with the real path
+        if os.path.islink(filepath):
+            filepath = os.path.realpath(filepath)
         if self.results_cache.has_key(filepath):
             self.log.info("found cached result for file %s" % filepath) 
             return self.results_cache[filepath]
@@ -45,7 +48,7 @@ class DroidFileSniffer(object):
         self.results_cache.update(results)
 
         if not results.has_key(filepath):
-            self.log.info("droid didn't find file %s in results, only have %s" % (filepath, results))
+            raise Exception("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
         return results.get(filepath)
 
     def sniff_format(self, filepath):
@@ -54,11 +57,6 @@ class DroidFileSniffer(object):
             return None
         format_ = self.signature_interpreter.determine_format(puid, filepath)
 
-        # droid can't be trusted to correctly recognize these formats
-        badly_recognized_extensions = ['zip']#["wms", "rss", "iati", "rdf", "xml", "zip", "html"]
-        if format_ and format_["extension"] in badly_recognized_extensions:
-            self.log.info("droid identified file as %s, which may be wrong so returning None" % format_["display_name"])
-            return None
         return format_
 
 class DroidWrapper(object):
@@ -110,7 +108,7 @@ class SignatureInterpreter(object):
             self.log.debug("found signature for puid %s:\n%s" % (puid, signature)) 
             format_ = self.format_from_signature_extension(puid)
             if not format_:
-                format_ = self.determine_Microsoft_format(puid, filepath)
+                format_ = self.determine_Microsoft_format(puid)
             
         return format_
 
@@ -131,28 +129,17 @@ class SignatureInterpreter(object):
                 return True
         return False
 
-    def determine_Microsoft_format(self, puid, filepath):
+    def determine_Microsoft_format(self, puid):
         signature = self.signature_for_puid(puid)
-
-        if "Microsoft" in signature['display_name']:
-            # indicates some kind of MS office format
-            if self._name_contains(signature, ["Spreadsheet", "Excel"]):
-                return Formats.by_display_name()["XLS"]
-            elif self._name_contains(signature, ["Word", "Document"]):
-                return Formats.by_display_name()["DOC"]
-            elif self._name_contains(signature, ["Powerpoint", "PowerPoint"]):
-                return Formats.by_display_name()["PPT"]
-
         if "Rich Text Format" in signature["display_name"]:
             # Rich Text format is compatible with Word
             return Formats.by_display_name()["DOC"]
 
         # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet.
         if puid in [u'fmt/111']:
-            _, file_extension = os.path.splitext(filepath)
-            format_ = Formats.by_extension().get(file_extension[1:]) # remove leading "."
+            format_ = Formats.by_display_name()["XLS"]
             if format_ and format_["display_name"] in ['PPT', 'XLS', 'DOC']:
-                self.log.info("OLE document: identified exact format from file extension %s" % format_["display_name"])
+                self.log.info("OLE document: guessed format %s" % format_["display_name"])
                 return format_
             # it's some kind of office document, can't tell exactly which
             return Formats.by_display_name()["DOC"]
