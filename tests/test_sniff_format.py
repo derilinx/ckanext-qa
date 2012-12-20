@@ -4,7 +4,8 @@ import logging
 from nose.tools import raises, assert_equal
 
 from ckanext.qa import sniff_format
-from ckanext.qa.sniff_format import sniff_file_format, mimetype_from_magic
+from ckanext.qa.sniff_format import sniff_file_format, magic_sniff_format
+from ckanext.qa.droid import DroidError
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('sniff')
@@ -134,19 +135,26 @@ class TestSniffFormat:
 
 class TestMimeTypeSniffing(object):
 
-    def test_detect_csv_from_mimetype(self):
-        mimetype = mimetype_from_magic(os.path.join(os.path.dirname(__file__), 'data', '311011.csv'), log)
-        assert_equal("text/plain", mimetype)
+    def test_detect_csv_with_magic(self):
+        format_ = magic_sniff_format(os.path.join(os.path.dirname(__file__), 'data', '311011.csv'), log)
+        assert_equal("text/plain", format_)
 
 class FakeDroid(object):
     def sniff_format(*args, **kwargs):
-        raise Exception("I'm not working")
-class TestErrorHandling(object):
-    def test_sniff_with_broken_droid(self):
-        try:
-            sniff_format.droid = FakeDroid()
-            assert_equal(None, sniff_file_format("foo", log))
-        finally:
-            sniff_format.droid = None
+        raise DroidError("I'm not working")
 
+class TestErrorHandling(object):
+
+    def setUp(self):
+        sniff_format.droid = FakeDroid()
+    def tearDown(self):
+        sniff_format.droid = None
+
+    def test_sniff_csv_with_broken_droid(self):
+        f = os.path.join(os.path.dirname(__file__), 'data', '311011.csv')
+        assert_equal('csv', sniff_file_format(f, log)['extension'])
+       
+    def test_sniff_xml_with_broken_droid(self):
+        f = os.path.join(os.path.dirname(__file__), 'data', 'DfidProjects-trunc.xml')
+        assert_equal('xml', sniff_file_format(f, log)['extension'])
 
