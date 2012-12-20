@@ -3,6 +3,7 @@ import logging
 
 from nose.tools import raises, assert_equal
 
+from ckanext.qa import sniff_format
 from ckanext.qa.sniff_format import sniff_file_format, mimetype_from_magic
 
 logging.basicConfig(level=logging.INFO)
@@ -136,4 +137,16 @@ class TestMimeTypeSniffing(object):
     def test_detect_csv_from_mimetype(self):
         mimetype = mimetype_from_magic(os.path.join(os.path.dirname(__file__), 'data', '311011.csv'), log)
         assert_equal("text/plain", mimetype)
+
+class FakeDroid(object):
+    def sniff_format(*args, **kwargs):
+        raise Exception("I'm not working")
+class TestErrorHandling(object):
+    def test_sniff_with_broken_droid(self):
+        try:
+            sniff_format.droid = FakeDroid()
+            assert_equal(None, sniff_file_format("foo", log))
+        finally:
+            sniff_format.droid = None
+
 

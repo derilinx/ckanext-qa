@@ -23,34 +23,35 @@ def sniff_file_format(filepath, log):
     if not droid:
         return old_sniff_file_format(filepath, log)
 
-    format_ = droid.sniff_format(filepath)
-    log.info("format determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
+    try:
+        format_ = droid.sniff_format(filepath)
+        log.info("format determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
 
-    if format_ == Formats.by_extension()['xml']:
-        format_ = get_xml_variant(_get_first_part_of_file(filepath, 500), log)
+        if format_ == Formats.by_extension()['xml']:
+            format_ = get_xml_variant(_get_first_part_of_file(filepath, 500), log)
+        if format_ == Formats.by_extension()['html']:
+            if has_rdfa(_get_first_part_of_file(filepath, 100000), log):
+                format_ = Formats.by_display_name()['RDFa'] 
+        if format_ == Formats.by_extension()['zip']:
+            format_ = get_zipped_format(filepath, log)
 
-    if format_ == Formats.by_extension()['html']:
-        if has_rdfa(_get_first_part_of_file(filepath, 100000), log):
-            format_ = Formats.by_display_name()['RDFa'] 
-
-    if format_ == Formats.by_extension()['zip']:
-        format_ = get_zipped_format(filepath, log)
-
-    if format_:
-        return format_
-        
-    log.info("Droid failed to identify file format, will look at mimetypes")
-
-    mimetype = mimetype_from_magic(filepath, log)
-    first_part_of_file = _get_first_part_of_file(filepath)
-
-    format_ = detect_format_from_mimetype(mimetype, first_part_of_file, log)
-    if format_:
-        return format_
-    
-    log.info("failed to identify file format from mimetypes, check if it is a zip")
+        if format_:
+            return format_
             
-    return format_
+        log.info("Droid failed to identify file format, will look at mimetypes")
+
+        mimetype = mimetype_from_magic(filepath, log)
+        first_part_of_file = _get_first_part_of_file(filepath)
+
+        format_ = detect_format_from_mimetype(mimetype, first_part_of_file, log)
+        if format_:
+            return format_
+        
+    except Exception, e:
+        log.error(e)
+
+    log.warn("failed to identify file format via Droid or Magic.")
+    return None
 
 def mimetype_from_magic(filepath, log):
     filepath_utf8 = filepath.encode('utf8') if isinstance(filepath, unicode) \

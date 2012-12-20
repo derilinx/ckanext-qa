@@ -35,6 +35,9 @@ class DroidFileSniffer(object):
         self.results_cache = {}
 
     def puid_of_file(self, filepath):
+        # if it's a symbolic link, droid will return the real path not the link, so work with the real path
+        if os.path.islink(filepath):
+            filepath = os.path.realpath(filepath)
         if self.results_cache.has_key(filepath):
             self.log.info("found cached result for file %s" % filepath) 
             return self.results_cache[filepath]
@@ -44,7 +47,7 @@ class DroidFileSniffer(object):
         self.results_cache.update(results)
 
         if not results.has_key(filepath):
-            raise ValueError("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
+            raise Exception("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
         return results.get(filepath)
 
     def sniff_format(self, filepath):

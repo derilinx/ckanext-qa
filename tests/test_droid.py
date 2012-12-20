@@ -139,7 +139,7 @@ class TestDroidFileSniffer(object):
         try:
             format_ = droid.sniff_format('myfile')
             assert False, "should have thrown an exception because droid didn't find the file"
-        except ValueError, expected:
+        except Exception, expected:
             pass
 
     def test_sniff_format_for_zip(self):
