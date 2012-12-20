@@ -53,11 +53,12 @@ class TestDroidIntegration(object):
             assert len(formats) in (0, 1), "puid has %s ambiguous extensions %s, found formats %s" % (puid, signature, formats)
 
     @check_for_droid_installation
-    def test_find_puid_of_file(self):
+    def test_find_puids_of_file(self):
         droid = droid_file_sniffer(log)
         
-        signature = droid.puid_of_file(os.path.join(DATA_DIR, "August-2010.xls"))
+        signature, contents = droid.puids_of_file(os.path.join(DATA_DIR, "August-2010.xls"))
         assert_equal("fmt/56", signature)
+        assert_equal([], contents)
 
     @check_for_droid_installation
     def test_softlinks(self):
@@ -67,7 +68,7 @@ class TestDroidIntegration(object):
         try:
             os.system("ln -s %s %s" % (afile, alink))
 
-            signature = droid.puid_of_file(alink)
+            signature, _ = droid.puids_of_file(alink)
             assert_equal("fmt/56", signature)
         finally:
             os.remove(alink)
@@ -76,13 +77,12 @@ class TestDroidIntegration(object):
     def test_zip_files(self):
         droid = droid_file_sniffer(log)
         zip_xls_file = os.path.join(DATA_DIR, 'telephone-network-data.xls.zip')
-        signature = droid.puid_of_file(zip_xls_file)
-        assert_equal("x-fmt/263", signature) 
-        all_puids = droid.puids_of_zip_contents(zip_xls_file)
+        file_puid, all_puids = droid.puids_of_file(zip_xls_file)
+        assert_equal("x-fmt/263", file_puid) 
         assert_equal(11, len(all_puids)) # 11 files in this zip
         assert 'fmt/61' in all_puids
         assert 'fmt/214' in all_puids
-        assert 'x-fmt/263' not in all_puids # don't want puid of original zip file
+        assert 'x-fmt/263' not in all_puids # don't want puid of original zip file here
 
     @check_for_droid_installation
     def test_assign_format_of_zip(self):

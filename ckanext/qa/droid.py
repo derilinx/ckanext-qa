@@ -41,48 +41,42 @@ class DroidFileSniffer(object):
             filepath = os.path.realpath(filepath)
         return filepath
 
-    def puid_of_file(self, filepath):
-        filepath = self._follow_softlink(filepath)
-
-        if self.results_cache.has_key(filepath):
-            self.log.debug("found cached result for file %s" % filepath) 
-            return self.results_cache[filepath]
-
+    def _run_droid(self, filepath):
         folder = os.path.dirname(filepath)
         results = self.droid.run_droid_on_folder(folder)
         if not results.has_key(filepath):
             raise DroidError("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
-        
         self.results_cache.update(results)
-        return self.results_cache[filepath]
 
-    def puids_of_zip_contents(self, filepath):
+    def _find_zip_contents(self, filepath):
+        contained_puids = []
+        for key, value in self.results_cache.items():
+            if filepath + "!" in key: # droid results will be of the form "zipfile!containedfile"
+                contained_puids.append(value)
+        return contained_puids
+
+    def puids_of_file(self, filepath):
         filepath = self._follow_softlink(filepath)
 
-        puids = []
-        zip_puid = self.puid_of_file(filepath)
-        for key, value in self.results_cache.items():
-            if filepath in key and not value == zip_puid:
-                puids.append(value)
-        if not puids:
-            raise DroidError("droid identified a zip file %s, but no results found for its contents:\n%s" % (filepath, self.results_cache))
-        return puids
+        if not self.results_cache.has_key(filepath):
+            self._run_droid(filepath)
+
+        original_puid = self.results_cache[filepath]
+        contained_puids = self._find_zip_contents(filepath)
+        return original_puid, sorted(contained_puids)
 
     def sniff_format(self, filepath):
-        puid = self.puid_of_file(filepath)
-        if not puid:
+        file_puid, contained_puids = self.puids_of_file(filepath)
+        if not file_puid:
             return None
 
-        format_ = None
-
-        if puid.startswith('x'): 
-            puids = self.puids_of_zip_contents(filepath)
-            format_ = self.signature_interpreter.overall_format(puids)
-
-        if not format_:
-            format_ = self.signature_interpreter.determine_format(puid)
-
-        return format_
+        if contained_puids:
+            self.log.info("indentified zip file, will look at contents to find overall format: %s" % contained_puids)
+            format_ = self.signature_interpreter.overall_format(contained_puids)
+            if format_:
+                return format_
+       
+        return self.signature_interpreter.determine_format(file_puid)
 
 class DroidError(Exception):
     pass
@@ -177,13 +171,11 @@ class SignatureInterpreter(object):
             # Rich Text format is compatible with Word
             return Formats.by_display_name()["DOC"]
 
-        # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet.
+        # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet, 
+        # but we don't currently know how to determine this.
         if puid in [u'fmt/111']:
-            format_ = Formats.by_display_name()["XLS"]
-            self.log.info("OLE document: guessed format %s" % format_["display_name"])
-            return format_
-            # it's some kind of office document, can't tell exactly which
-            #return Formats.by_display_name()["DOC"]
+            self.log.warn("OLE2 document detected: may contain spreadsheet but may not, giving them benefit of doubt and returning XLS")
+            return Formats.by_display_name()["XLS"]
         return None
 
 
