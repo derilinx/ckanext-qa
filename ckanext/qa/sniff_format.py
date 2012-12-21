@@ -6,7 +6,7 @@ import magic
 
 from ckanext.dgu.lib.formats import Formats
 
-from droid import droid_file_sniffer, DroidError
+from droid import droid_file_sniffer, DroidError, pretty_print_formats
 from old_sniff_format import old_sniff_file_format, is_psv, is_iati, is_xml_but_without_declaration,\
         get_xml_variant, has_rdfa, is_csv, is_json, get_zipped_format
 
@@ -29,11 +29,7 @@ def sniff_file_format(filepath, log):
     try:
         format_ = droid.sniff_format(filepath)
         log.info("format determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
-
         format_ = refine_droid_result(filepath, format_, log)
-
-        if format_ == Formats.by_extension()['zip']:
-            format_ = refine_zipped_format(filepath, log)
 
     except DroidError, e:
         log.error(e)
@@ -43,10 +39,7 @@ def sniff_file_format(filepath, log):
         
     log.info("Droid failed to fully identify file format, will look at magic")
 
-    magic_format = magic_sniff_format(filepath, log)
-    first_part_of_file = _get_first_part_of_file(filepath)
-
-    format_ = refine_magic_result(magic_format, first_part_of_file, log)
+    format_ = sniff_format_with_magic(filepath, log)
     if format_:
         return format_
 
@@ -59,6 +52,14 @@ def refine_droid_result(filepath, format_, log):
     if format_ == Formats.by_extension()['html']:
         if has_rdfa(_get_first_part_of_file(filepath, 100000), log):
             format_ = Formats.by_display_name()['RDFa'] 
+    if format_ == Formats.by_extension()['zip']:
+        format_ = refine_zipped_format(filepath, log)
+    return format_
+
+def sniff_format_with_magic(filepath, log):
+    magic_format = magic_sniff_format(filepath, log)
+    first_part_of_file = _get_first_part_of_file(filepath)
+    format_ = refine_magic_result(magic_format, first_part_of_file, log)
     return format_
 
 def magic_sniff_format(filepath, log):
@@ -84,45 +85,78 @@ def refine_magic_result(magic_format, first_part_of_file, log):
             if is_iati(first_part_of_file, log):    
                 return Formats.by_display_name()['IATI']
             
-        return Formats.by_mime_type()[magic_format]
+        return Formats.by_mime_type().get(magic_format)
     return None
 
 ZIP_FORMAT = Formats.by_extension()['zip']
         
-class ZipInterpreter(object):
-    "this class knows how to find the overall format of a zip file"
-    def __init__(self, log):
+class ZipSniffer(object):
+    "this class knows how to find the overall format of a zip file using Droid and Magic"
+    def __init__(self, filepath, droid, log):
+        self.filepath = filepath
+        self.droid = droid
         self.log = log
+        
+    def overall_format(self):
+        formats = self.droid.sniff_format_of_zip_contents(self.filepath)
+        unknown_formats = [relpath for relpath, format_ in formats.items()
+                                      if not format_]
+        if unknown_formats:
+            self.log.info("droid was not able to determine all the contents of the zip. Using magic to find the remainder")
+            temp_dir = self.unzip_file()
+            found_formats = self.use_magic_to_find_formats(temp_dir, unknown_formats)
+            self.log.info("contents of zip file, formats found by magic: %s" % pretty_print_formats(found_formats.values()))
+            formats.update(found_formats)
+        return overall_format(formats, self.log)
 
-    def overall_format(self, formats):
-        "for a container format, from the dict of constituent formats, determine overall format"
-        format_ = self.highest_scoring_format(formats)
-        if format_:
-            self.log.info("highest scoring format in zip is %s" % format_["display_name"])
-            combined_format =  format_['extension'] + '.zip'
-            return Formats.by_extension().get(combined_format) or ZIP_FORMAT
+    def use_magic_to_find_formats(self, unzipped_file_location, unknown_formats):
+        formats = {}
+        for relative_filepath in unknown_formats:
+            full_filepath = os.path.join(unzipped_file_location, relative_filepath)
+            if not os.path.exists(full_filepath):
+                raise DroidError("Droid found a file in the zip which wasn't there when we unzipped it %s" % relative_filepath)
+            format_ = sniff_format_with_magic(full_filepath, self.log)
+            formats[relative_filepath] = format_
+        return formats
+
+    def unzip_file(self):
+        zip_ = zipfile.ZipFile(self.filepath, 'r')
+        temp_dir = tempfile.mkdtemp()
+        zip_.extractall(temp_dir)
+        return temp_dir
+
+def overall_format(formats, log):
+    """find the highest scoring of these formats, 
+    or the zip format itself, and return that"""
+    format_ = highest_scoring_format(formats, log)
+    if format_:
+        log.info("highest scoring format in zip is %s" % format_["display_name"])
+        combined_format =  format_['extension'] + '.zip'
+        return Formats.by_extension().get(combined_format) or ZIP_FORMAT
+    return None
+
+def highest_scoring_format(formats, log):
+    formats = formats.values()
+    occurrences = {format_['display_name']: formats.count(format_) 
+                        for format_ in formats if format_}
+    scores = [(format_['openness'], 
+               occurrences[format_['display_name']], 
+               format_) 
+                        for format_ in formats if format_]
+    if len(scores) != len(formats): # indicates not all formats are known
         return None
-
-    def highest_scoring_format(self, formats):
-        scores = [(format_['openness'], format_) for format_ in formats.values() if format_]
-        if len(scores) != len(formats): # indicates not all formats are known
-            return None
-        scores.sort()
-        highest_score = scores[-1]
-        return highest_score[1]
+    scores.sort()
+    highest_score = scores[-1]
+    return highest_score[2]
 
 def refine_zipped_format(filename, log):
-    formats = droid.sniff_format_of_zip_contents(filename)
-    zip_interpreter = ZipInterpreter(log)
-    format_ = zip_interpreter.overall_format(formats)
+    
+    zip_sniffer = ZipSniffer(filename, droid, log)
+    format_ = zip_sniffer.overall_format()
     if format_:
         return format_
 
-    log.info("droid was unable to indentify all the formats in the zip, will revert to old way")
-    #temp_dir = tempfile.mkdtemp()
-    #ZipFile(filename).extractall(temp_dir)
-    # compile a list of formats of each file
-    # determine highest scoring
-
+    log.warn("zip sniffer was unable to indentify all the formats in the zip, will revert to old way")
+    
     return get_zipped_format(filename, log)
     
