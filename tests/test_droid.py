@@ -56,9 +56,8 @@ class TestDroidIntegration(object):
     def test_find_puids_of_file(self):
         droid = droid_file_sniffer(log)
         
-        signature, contents = droid.puids_of_file(os.path.join(DATA_DIR, "August-2010.xls"))
+        signature = droid.puid_of_file(os.path.join(DATA_DIR, "August-2010.xls"))
         assert_equal("fmt/56", signature)
-        assert_equal([], contents)
 
     @check_for_droid_installation
     def test_softlinks(self):
@@ -68,7 +67,7 @@ class TestDroidIntegration(object):
         try:
             os.system("ln -s %s %s" % (afile, alink))
 
-            signature, _ = droid.puids_of_file(alink)
+            signature = droid.puid_of_file(alink)
             assert_equal("fmt/56", signature)
         finally:
             os.remove(alink)
@@ -77,48 +76,51 @@ class TestDroidIntegration(object):
     def test_zip_files(self):
         droid = droid_file_sniffer(log)
         zip_xls_file = os.path.join(DATA_DIR, 'telephone-network-data.xls.zip')
-        file_puid, all_puids = droid.puids_of_file(zip_xls_file)
-        assert_equal("x-fmt/263", file_puid) 
-        assert_equal(11, len(all_puids)) # 11 files in this zip
-        assert 'fmt/61' in all_puids
-        assert 'fmt/214' in all_puids
-        assert 'x-fmt/263' not in all_puids # don't want puid of original zip file here
 
+        file_puid = droid.puid_of_file(zip_xls_file)
+        assert_equal("x-fmt/263", file_puid)
+
+        all_puids = droid.puids_of_zip_contents(zip_xls_file)
+        assert_equal(11, len(all_puids.keys())) # 11 files in this zip
+        assert 'x-fmt/263' not in all_puids.values(), "shouldn't find puid of original zip file in list of contents"
+        assert_equal('fmt/61', all_puids.get("hmrc-telephone-network-data-april2009-june2010-prs-v00.xls"))    
+        assert_equal('fmt/214', all_puids.get('nhs-direct-telephone-network-data-april-june2009-v00.xlsx'))      
+        
     @check_for_droid_installation
     def test_assign_format_of_zip(self):
-        puids = ['fmt/61', 'fmt/214', 'fmt/291', 'fmt/294']
+        puids = {"1": 'fmt/61', "2": 'fmt/214', "3": 'fmt/291', "4": 'fmt/294'}
         puid_of_zip_file = 'x-fmt/263'
         signature_interpreter = SignatureInterpreter(get_signatures(DROID_SIGNATURE_FILE), log)
         formats = signature_interpreter.determine_formats(puids)
-        assert_equal(['XLS', 'XLS', 'ODT', 'ODS'], [format_['display_name'] for format_ in formats if format_])
-        assert_equal('ODS', signature_interpreter.highest_scoring_format(puids)['display_name'])
+        assert_equal(sorted(['XLS', 'XLS', 'ODT', 'ODS']), sorted([format_['display_name'] for format_ in formats.values() if format_]))
 
     @check_for_droid_installation
-    def test_sniff_format_of_zip(self):
+    def test_sniff_format_of_zip_contents(self):
         zip_xls_file = os.path.join(DATA_DIR, 'telephone-network-data.xls.zip')
         droid = droid_file_sniffer(log)
-        format_ = droid.sniff_format(zip_xls_file)
-        assert_equal('XLS / Zip', format_['display_name'])
+        formats = droid.sniff_format_of_zip_contents(zip_xls_file)
+        assert_equal(Formats.by_extension()['xls'], formats.get("hmrc-telephone-network-data-april2009-june2010-prs-v00.xls"))    
+        assert_equal(Formats.by_extension()['xlsx'], formats.get('nhs-direct-telephone-network-data-april-june2009-v00.xlsx'))      
+        assert_equal(11, len(formats)) # 11 files in this zip
+        
 
 class TestSignatureInterpreter(object):
 
     def test_format_from_puid_with_multiple_extensions(self):
-        droid = SignatureInterpreter({u'fmt/56': 
-                    {'extensions': [u'xlc', u'xlm', u'xls'], 
+        droid = SignatureInterpreter({}, log)
+        format_ = droid.format_from_extension({'extensions': [u'xlc', u'xlm', u'xls'], 
                      'puid': u'fmt/56', 
                      'display_name': u'Microsoft Excel 3.0 Worksheet (xls)',
                      'extension': u'xlc', 
-                     'mime_type': u'application/vnd.ms-excel'}}, log)
-        format_ = droid.format_from_signature_extension(u'fmt/56')
+                     'mime_type': u'application/vnd.ms-excel'})
         assert_equal(Formats.by_display_name()['XLS'], format_)
 
     def test_format_from_xlsx(self):
-        droid = SignatureInterpreter({u'fmt/111':
-                        {'extensions': [],
+        droid = SignatureInterpreter({}, log)
+        format_ = droid.format_from_extension({'extensions': [],
                          'puid': u'fmt/111',
                          'display_name': u'OLE2 Compound Document Format', 
-                         'mime_type': ''}}, log)
-        format_ = droid.format_from_signature_extension(u'fmt/111')
+                         'mime_type': ''})
         assert_equal(None, format_)
 
 
@@ -126,7 +128,7 @@ class TestSignatureInterpreter(object):
         signature_interpreter = SignatureInterpreter({}, log)
         assert_equal(None, signature_interpreter.determine_format("foo"))
 
-    def test_sniff_format_ole_with_xlsx_extension_in_filename(self):
+    def test_sniff_format_ole2(self):
         signature_interpreter = SignatureInterpreter({u'fmt/111':
                         {'extensions': [],
                          'puid': u'fmt/111',
@@ -154,20 +156,14 @@ class TestSignatureInterpreter(object):
         format_ = signature_interpreter.determine_format(u'fmt/53')
         assert_equal('DOC', format_["display_name"])
 
-    def test_assign_format_of_zip_with_uknown_contents(self):
-        puids = [None, None]
-        signature_interpreter = SignatureInterpreter({}, log)
-        formats = signature_interpreter.determine_formats(puids)
-        assert_equal([None, None], formats)
-        assert_equal(None, signature_interpreter.highest_scoring_format(puids))
-
-    def test_assign_format_of_zip_with_partially_known_contents_is_not_known(self):
-        puids = [None, 'fmt/214']
-        signature_interpreter = SignatureInterpreter({'fmt/214' : {'extensions': [u'xlsx'], 'puid': u'fmt/214', 'display_name': u'Microsoft Excel for Windows', 'mime_type': ''}}, log)
-        formats = signature_interpreter.determine_formats(puids)
-        assert_equal(None, formats[0])
-        assert_equal('XLS', formats[1]['display_name'])
-        assert_equal(None, signature_interpreter.highest_scoring_format(puids))
+    def test_sniff_zip_with_non_zip_extension(self):
+        signature_interpreter = SignatureInterpreter({u'x-fmt/266':
+                        {'extensions': [u'.z', u'gz'], 
+                         'puid': u'x-fmt/266', 
+                         'display_name': u'GZIP Format', 
+                         'mime_type': u'application/x-gzip'}}, log)
+        format_ = signature_interpreter.determine_format(u'x-fmt/266')
+        assert_equal('zip', format_["extension"])
 
 class FakeDroidWrapper(object):
     def __init__(self, results):

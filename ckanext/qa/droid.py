@@ -1,26 +1,36 @@
 import subprocess
+import logging
 import os
 from xml.dom import minidom
 
 from ckanext.dgu.lib.formats import Formats
 
-#TODO: make this portable!
-DROID_INSTALL_DIR = "/home/emily/devtools/droid"
-DROID_SIGNATURE_FILE = "/home/emily/.droid6/signature_files/DROID_SignatureFile_V65.xml"
-DROID_CONTAINER_SIGNATURE_FILE = "/home/emily/.droid6/container_sigs/container-signature-20120828.xml"
+DROID_INSTALL_DIR = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "pyenv-qa", "droid")
+DROID_SIGNATURE_FILE = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "resources", "DROID_SignatureFile_V65.xml")
+DROID_CONTAINER_SIGNATURE_FILE = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "resources","container-signature-20120828.xml")
 
 def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
-                            signature_file=DROID_SIGNATURE_FILE,
-                            container_signature_file=DROID_CONTAINER_SIGNATURE_FILE):
+                       signature_file=DROID_SIGNATURE_FILE,
+                       container_signature_file=DROID_CONTAINER_SIGNATURE_FILE):
     """This is a factory method for constructing a DroidFileSniffer """
     
     # If Droid is not installed, we can't make one
     if not os.path.exists(DROID_INSTALL_DIR):
         return None
+    log = log.getChild('droid')
     droid = DroidWrapper(droid_install_dir, signature_file, 
                             container_signature_file, log)
     signatures = SignatureInterpreter(get_signatures(signature_file), log)
     return DroidFileSniffer(droid, signatures, log)
+
+def pretty_print_formats(formats):
+    l = []
+    for format_ in sorted(formats):
+        l.append(format_["display_name"] if format_ else "Unknown")
+    return str(l)
 
 class DroidFileSniffer(object):
     """This class can find what format Droid thinks a file has, and convert that
@@ -49,35 +59,39 @@ class DroidFileSniffer(object):
             raise DroidError("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
         self.results_cache.update(results)
 
-    def _find_zip_contents(self, filepath):
-        contained_puids = []
+    def puids_of_zip_contents(self, filepath):
+        contained_puids = {}
         for key, value in self.results_cache.items():
-            if filepath + "!" in key: # droid results will be of the form "zipfile!containedfile"
-                contained_puids.append(value)
+            # droid results will be of the form "zipfile!/containedfile"
+            if filepath + "!/" in key:
+                index_of_bang = key.index("!/")
+                contained_puids[key[index_of_bang+2:]] = value
+        self.log.info("contents of zip file, puids: %s" % sorted(contained_puids.values()))
         return contained_puids
 
-    def puids_of_file(self, filepath):
+    def puid_of_file(self, filepath):
         filepath = self._follow_softlink(filepath)
-
         if not self.results_cache.has_key(filepath):
             self._run_droid(filepath)
 
         original_puid = self.results_cache[filepath]
-        contained_puids = self._find_zip_contents(filepath)
-        return original_puid, sorted(contained_puids)
+        return original_puid
 
     def sniff_format(self, filepath):
-        file_puid, contained_puids = self.puids_of_file(filepath)
+        file_puid = self.puid_of_file(filepath)
         if not file_puid:
             return None
 
-        if contained_puids:
-            self.log.info("indentified zip file, will look at contents to find overall format: %s" % contained_puids)
-            format_ = self.signature_interpreter.overall_format(contained_puids)
-            if format_:
-                return format_
-       
         return self.signature_interpreter.determine_format(file_puid)
+
+    def sniff_format_of_zip_contents(self, filepath):
+        filepath = self._follow_softlink(filepath)
+        if not self.results_cache.has_key(filepath):
+            self._run_droid(filepath)
+
+        puids = self.puids_of_zip_contents(filepath)
+        formats = self.signature_interpreter.determine_formats(puids)
+        return formats
 
 class DroidError(Exception):
     pass
@@ -115,7 +129,8 @@ class DroidWrapper(object):
                 puid = fields[1]
                 results[filename] = puid
         if not results:
-            self.log.error("Droid did not give any results. stdout:\n%s\nstderr:\n%s" % (output, errors))
+            raise DroidError("Droid did not give any results. stdout:\n%s\nstderr:\n%s" \
+                                % (output, errors))
         return results
 
 class SignatureInterpreter(object):
@@ -125,60 +140,50 @@ class SignatureInterpreter(object):
         self._signatures = signatures
         self.log = log
 
-    def overall_format(self, puids):
-        "for a container format, from the list of constituent puids, determine overall format"
-        format_ = self.highest_scoring_format(puids)
-        if format_:
-            combined_format =  format_['extension'] + '.zip'
-            return Formats.by_extension().get(combined_format)      
-        return None
-
-    def highest_scoring_format(self, puids):
-        formats = self.determine_formats(puids)
-        scores = [(format_['openness'], format_) for format_ in formats if format_]
-        if len(scores) != len(formats): # indicates not all formats were recognized
-            return None
-        scores.sort()
-        return scores[-1][1]
-
     def determine_formats(self, puids):
-        return [self.determine_format(puid) for puid in puids]
+        formats = {filename: self.determine_format(puid) 
+                        for filename, puid in puids.items()}
+        self.log.info("contents of zip file, formats: %s" % pretty_print_formats(formats.values()))
+        return formats
 
     def determine_format(self, puid):
         format_ = None
         signature = self.signature_for_puid(puid)
         if signature:
             self.log.debug("found signature for puid %s:\n%s" % (puid, signature)) 
-            format_ = self.format_from_signature_extension(puid)
-            if not format_:
-                format_ = self.determine_Microsoft_format(puid)
+            format_ = self.format_from_extension(signature) \
+                        or self.format_from_other_field(signature)
             
         return format_
 
     def signature_for_puid(self, puid):
         return self._signatures.get(puid)
 
-    def format_from_signature_extension(self, puid):
-        signature = self.signature_for_puid(puid)
+    def format_from_extension(self, signature):
         for ext in signature["extensions"]:
             format_ = Formats.by_extension().get(ext)
             if format_:
                 return format_
         return None
 
-    def determine_Microsoft_format(self, puid):
-        signature = self.signature_for_puid(puid)
+    def format_from_other_field(self, signature):
         if "Rich Text Format" in signature["display_name"]:
             # Rich Text format is compatible with Word
             return Formats.by_display_name()["DOC"]
 
-        # OLE2 document of some kind, indicates Microsoft office, could be a spreadsheet, 
-        # but we don't currently know how to determine this.
-        if puid in [u'fmt/111']:
+        if "Archive" in signature["display_name"] \
+                or "ZIP" in signature["display_name"]:
+            # not all zip formats use the extension "zip", 
+            # but we classify them as zip files anyway
+            return Formats.by_extension()["zip"]
+
+        if signature["puid"] == u'fmt/111':
+            # OLE2 document of some kind, indicates Microsoft office, 
+            # could be a spreadsheet, 
+            # but we don't currently know how to determine this, 
+            # so we're guessing xls.
             self.log.warn("OLE2 document detected: may contain spreadsheet but may not, giving them benefit of doubt and returning XLS")
             return Formats.by_display_name()["XLS"]
-        return None
-
 
 def get_signatures(signature_file):
     """Signatures files describe each file format identified by Droid.
