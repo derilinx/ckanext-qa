@@ -48,11 +48,12 @@ class DroidFileSniffer(object):
             raise DroidError("droid didn't find file %s in results, and it should have been in the folder. Only have results:\n%s" % (filepath, results))
         self.results_cache.update(results)
 
-    def _find_zip_contents(self, filepath):
-        contained_puids = []
+    def puids_of_zip_contents(self, filepath):
+        contained_puids = {}
         for key, value in self.results_cache.items():
-            if filepath + "!" in key: # droid results will be of the form "zipfile!containedfile"
-                contained_puids.append(value)
+            if filepath + "!/" in key: # droid results will be of the form "zipfile!/containedfile"
+                index_of_bang = key.index("!/")
+                contained_puids[key[index_of_bang+2:]] = value
         return contained_puids
 
     def puids_of_file(self, filepath):
@@ -62,8 +63,8 @@ class DroidFileSniffer(object):
             self._run_droid(filepath)
 
         original_puid = self.results_cache[filepath]
-        contained_puids = self._find_zip_contents(filepath)
-        return original_puid, sorted(contained_puids)
+        contained_puids = self.puids_of_zip_contents(filepath)
+        return original_puid, contained_puids
 
     def sniff_format(self, filepath):
         file_puid, contained_puids = self.puids_of_file(filepath)
@@ -77,6 +78,14 @@ class DroidFileSniffer(object):
                 return format_
        
         return self.signature_interpreter.determine_format(file_puid)
+
+    def sniff_format_of_zip_contents(self, filepath):
+        filepath = self._follow_softlink(filepath)
+        if not self.results_cache.has_key(filepath):
+            self._run_droid(filepath)
+
+        puids = self.puids_of_zip_contents(filepath)
+        return self.signature_interpreter.determine_formats(puids)
 
 class DroidError(Exception):
     pass
@@ -134,14 +143,14 @@ class SignatureInterpreter(object):
 
     def highest_scoring_format(self, puids):
         formats = self.determine_formats(puids)
-        scores = [(format_['openness'], format_) for format_ in formats if format_]
+        scores = [(format_['openness'], format_) for format_ in formats.values() if format_]
         if len(scores) != len(formats): # indicates not all formats were recognized
             return None
         scores.sort()
         return scores[-1][1]
 
     def determine_formats(self, puids):
-        return [self.determine_format(puid) for puid in puids]
+        return {filename: self.determine_format(puid) for filename, puid in puids.items()}
 
     def determine_format(self, puid):
         format_ = None

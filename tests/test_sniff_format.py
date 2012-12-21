@@ -3,8 +3,11 @@ import logging
 
 from nose.tools import raises, assert_equal
 
+from ckanext.dgu.lib.formats import Formats
+
 from ckanext.qa import sniff_format
-from ckanext.qa.sniff_format import sniff_file_format, magic_sniff_format
+from ckanext.qa.sniff_format import sniff_file_format, magic_sniff_format, refine_zipped_format
+from ckanext.qa.sniff_format import ZipInterpreter
 from ckanext.qa.droid import DroidError
 
 logging.basicConfig(level=logging.INFO)
@@ -139,14 +142,14 @@ class TestMimeTypeSniffing(object):
         format_ = magic_sniff_format(os.path.join(os.path.dirname(__file__), 'data', '311011.csv'), log)
         assert_equal("text/plain", format_)
 
-class FakeDroid(object):
+class BrokenDroid(object):
     def sniff_format(*args, **kwargs):
         raise DroidError("I'm not working")
 
 class TestErrorHandling(object):
 
     def setUp(self):
-        sniff_format.droid = FakeDroid()
+        sniff_format.droid = BrokenDroid()
     def tearDown(self):
         sniff_format.droid = None
 
@@ -157,4 +160,53 @@ class TestErrorHandling(object):
     def test_sniff_xml_with_broken_droid(self):
         f = os.path.join(os.path.dirname(__file__), 'data', 'DfidProjects-trunc.xml')
         assert_equal('xml', sniff_file_format(f, log)['extension'])
+
+class FakeDroid(object):
+    def __init__(self, formats, zip_contents):
+        self.formats = formats
+        self.zip_contents = zip_contents
+    def sniff_format(self, filepath):
+        return self.formats[filepath]
+    def sniff_format_of_zip_contents(self, filepath):
+        return self.zip_contents
+
+class TestSniffingZips(object):
+    def tearDown(self):
+        sniff_format.droid = None
+    def test_refine_zipped_format_using_both_droid_and_magic(self):
+        f = os.path.join(os.path.dirname(__file__), 'data', 'written_complains.csv.zip')
+        sniff_format.droid = FakeDroid({"%s" % f: Formats.by_extension()['zip']},
+                                       {"foo": Formats.by_extension()['xls'], 
+                                        "bar": None})
+        format_ = refine_zipped_format(f, log)
+        assert_equal('csv.zip', format_['extension'])
+        format_ = sniff_file_format(f, log)
+        assert_equal('csv.zip', format_['extension'])
+
+    def test_refine_zipped_format_using_only_droid(self):
+        f = os.path.join(os.path.dirname(__file__), 'data', 'telephone-network-data.xls.zip')
+        sniff_format.droid = FakeDroid({"%s" % f: Formats.by_extension()['zip']},
+                                       {"foo": Formats.by_extension()['xls'], 
+                                        "bar": Formats.by_extension()['doc']})
+        format_ = refine_zipped_format(f, log)
+        assert_equal('xls.zip', format_['extension'])
+
+class TestZipInterpreter(object):
+    def test_assign_format_of_zip_with_uknown_contents(self):
+        formats = {"1": None, "2": None}
+        zip_interpreter = ZipInterpreter(log)
+        assert_equal(None, zip_interpreter.highest_scoring_format(formats))
+        assert_equal(None, zip_interpreter.overall_format(formats))
+
+    def test_assign_format_of_zip_with_partially_known_contents_is_not_known(self):
+        formats = {"1": None, "2": Formats.by_extension()['xls']}
+        zip_interpreter = ZipInterpreter(log)
+        assert_equal(None, zip_interpreter.highest_scoring_format(formats))
+
+    def test_assign_format_of_zip_with_fully_known_contents(self):
+        formats = {"1": Formats.by_extension()['doc'], "2": Formats.by_extension()['xls']}
+        zip_interpreter = ZipInterpreter(log)
+        assert_equal(Formats.by_extension()['xls'], zip_interpreter.highest_scoring_format(formats))
+        assert_equal(Formats.by_extension()['xls.zip'], zip_interpreter.overall_format(formats))
+
 
