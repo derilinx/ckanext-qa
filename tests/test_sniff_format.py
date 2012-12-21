@@ -6,7 +6,8 @@ from nose.tools import raises, assert_equal
 from ckanext.dgu.lib.formats import Formats
 
 from ckanext.qa import sniff_format
-from ckanext.qa.sniff_format import sniff_file_format, magic_sniff_format, refine_zipped_format
+from ckanext.qa.sniff_format import sniff_file_format, sniff_format_with_magic
+from ckanext.qa.sniff_format import refine_zipped_format
 from ckanext.qa.sniff_format import ZipSniffer, highest_scoring_format, overall_format
 from ckanext.qa.droid import DroidError
 
@@ -148,13 +149,6 @@ class TestSniffFormat:
     def test_rtf(self):
         self.check_format('doc', 'foi-bis-quarterly-publications-may-july-2010-special-advisers.doc')
 
-
-class TestMimeTypeSniffing(object):
-
-    def test_detect_csv_with_magic(self):
-        format_ = magic_sniff_format(os.path.join(os.path.dirname(__file__), 'data', '311011.csv'), log)
-        assert_equal("text/plain", format_)
-
 class BrokenDroid(object):
     def sniff_format(*args, **kwargs):
         raise DroidError("I'm not working")
@@ -213,9 +207,9 @@ class TestZipSniffer(object):
         assert_equal(None, highest_scoring_format(formats, log))
         assert_equal(None, overall_format(formats, log))
 
-    def test_assign_format_of_zip_with_partially_known_contents_is_not_known(self):
+    def test_assign_format_of_zip_with_partially_known_contents(self):
         formats = {"1": None, "2": XLS}
-        assert_equal(None, highest_scoring_format(formats, log))
+        assert_equal(XLS, highest_scoring_format(formats, log))
 
     def test_assign_format_of_zip_with_fully_known_contents(self):
         formats = {"1": DOC, "2": XLS}

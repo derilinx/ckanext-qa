@@ -23,30 +23,34 @@ def sniff_file_format(filepath, log):
     if not droid:
         droid = droid_file_sniffer(log)
     if not droid:
-        return old_sniff_file_format(filepath, log)
+        raise DroidError("droid does not appear to be installed")
 
-    format_ = None
-    try:
-        format_ = droid.sniff_format(filepath)
-        log.info("format determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
-        format_ = refine_droid_result(filepath, format_, log)
-
-    except DroidError, e:
-        log.error(e)
-
+    format_ = sniff_format_with_droid(filepath, log)
     if format_:
         return format_
         
-    log.info("Droid failed to fully identify file format, will look at magic")
+    log.info("Droid failed to identify file format, will try using magic")
 
     format_ = sniff_format_with_magic(filepath, log)
     if format_:
         return format_
 
-    log.warn("failed to identify file format via Droid or Magic.")
+    log.warn("failed to identify file format using Droid or Magic.")
     return None
 
-def refine_droid_result(filepath, format_, log):
+def sniff_format_with_droid(filepath, log):
+    format_ = None
+    try:
+        format_ = droid.sniff_format(filepath)
+        log.info("format initially determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
+        format_ = _refine_droid_result(filepath, format_, log)
+
+    except DroidError, e:
+        log.error(e)
+
+    return format_
+
+def _refine_droid_result(filepath, format_, log):
     if format_ == Formats.by_extension()['xml']:
         format_ = get_xml_variant(_get_first_part_of_file(filepath, 500), log)
     if format_ == Formats.by_extension()['html']:
@@ -57,36 +61,32 @@ def refine_droid_result(filepath, format_, log):
     return format_
 
 def sniff_format_with_magic(filepath, log):
-    magic_format = magic_sniff_format(filepath, log)
-    first_part_of_file = _get_first_part_of_file(filepath)
-    format_ = refine_magic_result(magic_format, first_part_of_file, log)
-    return format_
-
-def magic_sniff_format(filepath, log):
     filepath_utf8 = filepath.encode('utf8') if isinstance(filepath, unicode) \
                     else filepath
     magic_format = magic.from_file(filepath_utf8, mime=True)
+    if not magic_format:
+        return None
+    first_part_of_file = _get_first_part_of_file(filepath)
+    format_ = _refine_magic_result(magic_format, first_part_of_file, log)
     log.info("format found by magic %s" % magic_format)
-    return magic_format
+    return format_
 
-def refine_magic_result(magic_format, first_part_of_file, log):    
-    if magic_format:
-        if magic_format == "text/plain": 
-            if is_json(first_part_of_file, log):
-                return Formats.by_extension()['json']
-            if is_csv(first_part_of_file, log):
-                return Formats.by_extension()['csv']
-            if is_psv(first_part_of_file, log):
-                return Formats.by_extension()['psv']
-            if is_xml_but_without_declaration(first_part_of_file, log):
-                return Formats.by_extension()['xml']
+def _refine_magic_result(magic_format, first_part_of_file, log):    
+    if magic_format == "text/plain": 
+        if is_json(first_part_of_file, log):
+            return Formats.by_extension()['json']
+        if is_csv(first_part_of_file, log):
+            return Formats.by_extension()['csv']
+        if is_psv(first_part_of_file, log):
+            return Formats.by_extension()['psv']
+        if is_xml_but_without_declaration(first_part_of_file, log):
+            return Formats.by_extension()['xml']
 
-        if magic_format == 'text/html':
-            if is_iati(first_part_of_file, log):    
-                return Formats.by_display_name()['IATI']
-            
-        return Formats.by_mime_type().get(magic_format)
-    return None
+    if magic_format == 'text/html':
+        if is_iati(first_part_of_file, log):    
+            return Formats.by_display_name()['IATI']
+        
+    return Formats.by_mime_type().get(magic_format)
 
 ZIP_FORMAT = Formats.by_extension()['zip']
         
@@ -143,20 +143,16 @@ def highest_scoring_format(formats, log):
                occurrences[format_['display_name']], 
                format_) 
                         for format_ in formats if format_]
-    if len(scores) != len(formats): # indicates not all formats are known
-        return None
+    if not scores:
+        return None    
     scores.sort()
     highest_score = scores[-1]
     return highest_score[2]
 
 def refine_zipped_format(filename, log):
-    
     zip_sniffer = ZipSniffer(filename, droid, log)
     format_ = zip_sniffer.overall_format()
-    if format_:
-        return format_
+    if not format_:
+        log.warn("Unable to indentify all the formats in the zip, returning generic Zip format")
+    return format_ or ZIP_FORMAT
 
-    log.warn("zip sniffer was unable to indentify all the formats in the zip, will revert to old way")
-    
-    return get_zipped_format(filename, log)
-    
