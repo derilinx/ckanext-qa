@@ -56,27 +56,19 @@ class DroidFileSniffer(object):
                 contained_puids[key[index_of_bang+2:]] = value
         return contained_puids
 
-    def puids_of_file(self, filepath):
+    def puid_of_file(self, filepath):
         filepath = self._follow_softlink(filepath)
-
         if not self.results_cache.has_key(filepath):
             self._run_droid(filepath)
 
         original_puid = self.results_cache[filepath]
-        contained_puids = self.puids_of_zip_contents(filepath)
-        return original_puid, contained_puids
+        return original_puid
 
     def sniff_format(self, filepath):
-        file_puid, contained_puids = self.puids_of_file(filepath)
+        file_puid = self.puid_of_file(filepath)
         if not file_puid:
             return None
 
-        if contained_puids:
-            self.log.info("indentified zip file, will look at contents to find overall format: %s" % contained_puids)
-            format_ = self.signature_interpreter.overall_format(contained_puids)
-            if format_:
-                return format_
-       
         return self.signature_interpreter.determine_format(file_puid)
 
     def sniff_format_of_zip_contents(self, filepath):
@@ -132,22 +124,6 @@ class SignatureInterpreter(object):
     def __init__(self, signatures, log):
         self._signatures = signatures
         self.log = log
-
-    def overall_format(self, puids):
-        "for a container format, from the list of constituent puids, determine overall format"
-        format_ = self.highest_scoring_format(puids)
-        if format_:
-            combined_format =  format_['extension'] + '.zip'
-            return Formats.by_extension().get(combined_format)      
-        return None
-
-    def highest_scoring_format(self, puids):
-        formats = self.determine_formats(puids)
-        scores = [(format_['openness'], format_) for format_ in formats.values() if format_]
-        if len(scores) != len(formats): # indicates not all formats were recognized
-            return None
-        scores.sort()
-        return scores[-1][1]
 
     def determine_formats(self, puids):
         return {filename: self.determine_format(puid) for filename, puid in puids.items()}
