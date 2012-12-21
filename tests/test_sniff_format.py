@@ -13,6 +13,14 @@ from ckanext.qa.droid import DroidError
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('sniff')
 
+# for convenience and readability, pre-look up some common formats
+XLS = Formats.by_extension()['xls']
+DOC = Formats.by_extension()['doc']
+PPT = Formats.by_extension()['ppt']
+CSV = Formats.by_extension()['csv']
+ZIP = Formats.by_extension()['zip']
+XLS_ZIP = Formats.by_extension()['xls.zip']
+
 class TestSniffFormat:
     @classmethod
     def setup_class(cls):
@@ -191,6 +199,7 @@ class TestSniffingZips(object):
         format_ = refine_zipped_format(f, log)
         assert_equal('xls.zip', format_['extension'])
 
+
 class TestZipInterpreter(object):
     def test_assign_format_of_zip_with_uknown_contents(self):
         formats = {"1": None, "2": None}
@@ -199,14 +208,19 @@ class TestZipInterpreter(object):
         assert_equal(None, zip_interpreter.overall_format(formats))
 
     def test_assign_format_of_zip_with_partially_known_contents_is_not_known(self):
-        formats = {"1": None, "2": Formats.by_extension()['xls']}
+        formats = {"1": None, "2": XLS}
         zip_interpreter = ZipInterpreter(log)
         assert_equal(None, zip_interpreter.highest_scoring_format(formats))
 
     def test_assign_format_of_zip_with_fully_known_contents(self):
-        formats = {"1": Formats.by_extension()['doc'], "2": Formats.by_extension()['xls']}
+        formats = {"1": DOC, "2": XLS}
         zip_interpreter = ZipInterpreter(log)
-        assert_equal(Formats.by_extension()['xls'], zip_interpreter.highest_scoring_format(formats))
-        assert_equal(Formats.by_extension()['xls.zip'], zip_interpreter.overall_format(formats))
+        assert_equal(XLS, zip_interpreter.highest_scoring_format(formats))
+        assert_equal(XLS_ZIP, zip_interpreter.overall_format(formats))
+
+    def test_assign_format_of_zip_where_no_contents_score_better_than_zip(self):
+        formats = {"1": DOC, "2": PPT}
+        zip_interpreter = ZipInterpreter(log)
+        assert_equal(ZIP, zip_interpreter.overall_format(formats))
 
 

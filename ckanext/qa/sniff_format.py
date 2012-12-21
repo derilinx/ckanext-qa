@@ -87,6 +87,8 @@ def refine_magic_result(magic_format, first_part_of_file, log):
         return Formats.by_mime_type()[magic_format]
     return None
 
+ZIP_FORMAT = Formats.by_extension()['zip']
+        
 class ZipInterpreter(object):
     "this class knows how to find the overall format of a zip file"
     def __init__(self, log):
@@ -96,8 +98,9 @@ class ZipInterpreter(object):
         "for a container format, from the dict of constituent formats, determine overall format"
         format_ = self.highest_scoring_format(formats)
         if format_:
+            self.log.info("highest scoring format in zip is %s" % format_["display_name"])
             combined_format =  format_['extension'] + '.zip'
-            return Formats.by_extension().get(combined_format)
+            return Formats.by_extension().get(combined_format) or ZIP_FORMAT
         return None
 
     def highest_scoring_format(self, formats):
@@ -105,7 +108,8 @@ class ZipInterpreter(object):
         if len(scores) != len(formats): # indicates not all formats are known
             return None
         scores.sort()
-        return scores[-1][1]
+        highest_score = scores[-1]
+        return highest_score[1]
 
 def refine_zipped_format(filename, log):
     formats = droid.sniff_format_of_zip_contents(filename)

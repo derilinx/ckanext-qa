@@ -107,22 +107,20 @@ class TestDroidIntegration(object):
 class TestSignatureInterpreter(object):
 
     def test_format_from_puid_with_multiple_extensions(self):
-        droid = SignatureInterpreter({u'fmt/56': 
-                    {'extensions': [u'xlc', u'xlm', u'xls'], 
+        droid = SignatureInterpreter({}, log)
+        format_ = droid.format_from_extension({'extensions': [u'xlc', u'xlm', u'xls'], 
                      'puid': u'fmt/56', 
                      'display_name': u'Microsoft Excel 3.0 Worksheet (xls)',
                      'extension': u'xlc', 
-                     'mime_type': u'application/vnd.ms-excel'}}, log)
-        format_ = droid.format_from_signature_extension(u'fmt/56')
+                     'mime_type': u'application/vnd.ms-excel'})
         assert_equal(Formats.by_display_name()['XLS'], format_)
 
     def test_format_from_xlsx(self):
-        droid = SignatureInterpreter({u'fmt/111':
-                        {'extensions': [],
+        droid = SignatureInterpreter({}, log)
+        format_ = droid.format_from_extension({'extensions': [],
                          'puid': u'fmt/111',
                          'display_name': u'OLE2 Compound Document Format', 
-                         'mime_type': ''}}, log)
-        format_ = droid.format_from_signature_extension(u'fmt/111')
+                         'mime_type': ''})
         assert_equal(None, format_)
 
 
@@ -157,6 +155,15 @@ class TestSignatureInterpreter(object):
                          'mime_type': u'application/rtf, text/rtf'}}, log)
         format_ = signature_interpreter.determine_format(u'fmt/53')
         assert_equal('DOC', format_["display_name"])
+
+    def test_sniff_zip_with_non_zip_extension(self):
+        signature_interpreter = SignatureInterpreter({u'x-fmt/266':
+                        {'extensions': [u'.z', u'gz'], 
+                         'puid': u'x-fmt/266', 
+                         'display_name': u'GZIP Format', 
+                         'mime_type': u'application/x-gzip'}}, log)
+        format_ = signature_interpreter.determine_format(u'x-fmt/266')
+        assert_equal('zip', format_["extension"])
 
 class FakeDroidWrapper(object):
     def __init__(self, results):
