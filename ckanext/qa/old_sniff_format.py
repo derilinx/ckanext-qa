@@ -261,7 +261,7 @@ def is_xml_but_without_declaration(buf, log):
             return False
         log.info('XML detected - first tag name: <%s>', top_level_tag_name)
         return True
-    log.warning('XML tag not detected')
+    log.info('XML tag not detected')
     return False
 
 def get_xml_variant(buf, log):
