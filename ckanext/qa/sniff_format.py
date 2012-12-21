@@ -45,6 +45,10 @@ def sniff_format_with_droid(filepath, log):
         log.info("format initially determined for file %s by DROID: %s" % (filepath, format_["display_name"] if format_ else "Unknown"))
         format_ = _refine_droid_result(filepath, format_, log)
 
+        # This is here and not in _refine_droid_results to avoid recursively opening zips containing zips
+        if format_ == Formats.by_extension()['zip']:
+            format_ = refine_zipped_format(filepath, log)
+
     except DroidError, e:
         log.error(e)
 
@@ -56,8 +60,6 @@ def _refine_droid_result(filepath, format_, log):
     if format_ == Formats.by_extension()['html']:
         if has_rdfa(_get_first_part_of_file(filepath, 100000), log):
             format_ = Formats.by_display_name()['RDFa'] 
-    if format_ == Formats.by_extension()['zip']:
-        format_ = refine_zipped_format(filepath, log)
     return format_
 
 def sniff_format_with_magic(filepath, log):
@@ -99,15 +101,22 @@ class ZipSniffer(object):
         
     def overall_format(self):
         formats = self.droid.sniff_format_of_zip_contents(self.filepath)
+        temp_dir = self.unzip_file()
+        
+        formats = self.refine_droid_results_for_zip_contents(temp_dir, formats)
         unknown_formats = [relpath for relpath, format_ in formats.items()
                                       if not format_]
         if unknown_formats:
             self.log.info("droid was not able to determine all the contents of the zip. Using magic to find the remainder")
-            temp_dir = self.unzip_file()
             found_formats = self.use_magic_to_find_formats(temp_dir, unknown_formats)
             self.log.info("contents of zip file, formats found by magic: %s" % pretty_print_formats(found_formats.values()))
             formats.update(found_formats)
         return overall_format(formats, self.log)
+
+    def refine_droid_results_for_zip_contents(self, temp_dir, formats):
+        return {relpath: _refine_droid_result(os.path.join(temp_dir, relpath), format_, self.log)
+                     for relpath, format_ in formats.items()}
+        
 
     def use_magic_to_find_formats(self, unzipped_file_location, unknown_formats):
         formats = {}
@@ -120,6 +129,7 @@ class ZipSniffer(object):
         return formats
 
     def unzip_file(self):
+        self.log.info("unzipping file: %s" % self.filepath) 
         zip_ = zipfile.ZipFile(self.filepath, 'r')
         temp_dir = tempfile.mkdtemp()
         zip_.extractall(temp_dir)
@@ -131,8 +141,12 @@ def overall_format(formats, log):
     format_ = highest_scoring_format(formats, log)
     if format_:
         log.info("highest scoring format in zip is %s" % format_["display_name"])
-        combined_format =  format_['extension'] + '.zip'
-        return Formats.by_extension().get(combined_format) or ZIP_FORMAT
+        if format_['display_name'] == 'RDFa':
+            combined_format = Formats.by_extension()['rdfa.zip']
+        else:
+            combined_format_extension =  format_['extension'] + '.zip'
+            combined_format = Formats.by_extension().get(combined_format_extension)
+        return combined_format or ZIP_FORMAT
     return None
 
 def highest_scoring_format(formats, log):
