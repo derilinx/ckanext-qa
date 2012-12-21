@@ -24,6 +24,12 @@ def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
     signatures = SignatureInterpreter(get_signatures(signature_file), log)
     return DroidFileSniffer(droid, signatures, log)
 
+def pretty_print_formats(formats):
+    l = []
+    for format_ in sorted(formats):
+        l.append(format_["display_name"] if format_ else "Unknown")
+    return str(l)
+
 class DroidFileSniffer(object):
     """This class can find what format Droid things a file has, and convert that
     to a Format instance using a SignatureInterpreter class """
@@ -134,7 +140,7 @@ class SignatureInterpreter(object):
     def determine_formats(self, puids):
         formats = {filename: self.determine_format(puid) 
                         for filename, puid in puids.items()}
-        self.log.info("contents of zip file, formats: %s" % [format_["display_name"] for format_ in sorted(formats.values()) if format_])
+        self.log.info("contents of zip file, formats: %s" % pretty_print_formats(formats.values()))
         return formats
 
     def determine_format(self, puid):
