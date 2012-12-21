@@ -20,6 +20,9 @@ Before installing ckanext-qa, make sure that you have installed the following:
 
 * CKAN 1.5.1+
 * ckanext-archiver (http://github.com/okfn/ckanext-archiver)
+* droid: download the release (http://digital-preservation.github.com/droid/),
+create a directory <your checkout>/pyenv-qa/droid/, and extract the contents of the release zip there.
+You should end up with a file "droid-command-line-6.1.jar" in that folder.
 
 
 Installation

@@ -5,10 +5,12 @@ from xml.dom import minidom
 
 from ckanext.dgu.lib.formats import Formats
 
-#TODO: make this portable!
-DROID_INSTALL_DIR = "/home/emily/devtools/droid"
-DROID_SIGNATURE_FILE = "/home/emily/.droid6/signature_files/DROID_SignatureFile_V65.xml"
-DROID_CONTAINER_SIGNATURE_FILE = "/home/emily/.droid6/container_sigs/container-signature-20120828.xml"
+DROID_INSTALL_DIR = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "pyenv-qa", "droid")
+DROID_SIGNATURE_FILE = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "resources", "DROID_SignatureFile_V65.xml")
+DROID_CONTAINER_SIGNATURE_FILE = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "resources","container-signature-20120828.xml")
 
 def droid_file_sniffer(log, droid_install_dir=DROID_INSTALL_DIR,
                        signature_file=DROID_SIGNATURE_FILE,
