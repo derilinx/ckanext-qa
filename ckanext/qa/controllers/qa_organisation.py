@@ -9,7 +9,7 @@ from ckanext.qa.reports import (
 )
 
 class QAOrganisationController(BaseController):
-    def index(self):                
+    def index(self):
         return render('ckanext/qa/organisation/index.html')
 
     def broken_resource_links(self, id=None):
@@ -25,7 +25,12 @@ class QAOrganisationController(BaseController):
             return render('ckanext/qa/organisation/broken_resource_links/organisation.html')
 
     def scores(self, id=None):
-        c.include_sub_publishers = t.asbool(request.params.get('include_sub_publishers', False))
+        try:
+            c.include_sub_publishers = t.asbool(request.params.get('include_sub_publishers', False))
+        except ValueError:
+            # Handle junk in the parameter that asbool doesn't handle well.
+            c.include_sub_publishers = False
+
         if id is None:
             c.query = organisation_score_summaries
             c.organisations = c.query(include_sub_organisations=c.include_sub_publishers)
