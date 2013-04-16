@@ -9,6 +9,7 @@ from ckanext.qa.reports import (
 )
 
 class QAOrganisationController(BaseController):
+
     def index(self):
         return render('ckanext/qa/organisation/index.html')
 

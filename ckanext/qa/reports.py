@@ -1,5 +1,6 @@
 import datetime
 import re
+import collections
 from collections import namedtuple, defaultdict
 
 from sqlalchemy.util import OrderedDict
@@ -8,7 +9,7 @@ from sqlalchemy import or_, and_, func
 import ckan.model as model
 import ckan.plugins as p
 import ckan.lib.dictization.model_dictize as model_dictize
-from ckan.lib.helpers import json
+from ckan.lib.helpers import json, OrderedDict
 from ckan.lib.search.query import PackageSearchQuery
 from ckanext.dgu.lib.publisher import go_down_tree, go_up_tree
 from ckan.lib.base import abort
@@ -139,6 +140,20 @@ def resource_five_stars(id):
 
     return result
 
+def _find_in_cache(entity, key_root, withsub=False):
+    key = key_root
+
+    if withsub:
+        key = "".join([key_root, '-withsub'])
+
+    cache = model.DataCache.get_fresh(entity, key)
+    if cache:
+        log.debug("Found %s/%s in cache" % (entity,key_root,))
+        return cache
+
+    return None
+
+
 def broken_resource_links_by_dataset():
     """
     Return a list of named tuples, one for each dataset that contains
@@ -150,14 +165,14 @@ def broken_resource_links_by_dataset():
     rows = model.Session.execute(
         """
         select package.id as package_id, task_status.value as reason, resource.url as url, package.title as title, package.name as name
-            from task_status 
+            from task_status
         left join resource on task_status.entity_id = resource.id
         left join resource_group on resource.resource_group_id = resource_group.id
         left join package on resource_group.package_id = package.id
         where
             entity_id in (select entity_id from task_status where key='openness_score' and value='0')
-        and key='openness_score_reason' 
-        and package.state = 'active' 
+        and key='openness_score_reason'
+        and package.state = 'active'
         and resource.state='active'
         and resource_group.state='active'
         and task_status.value!='License not open'
@@ -178,16 +193,28 @@ def organisations_with_broken_resource_links_by_name():
     return result
 
 def organisations_with_broken_resource_links(include_resources=False):
+    """ This appears to be over-ridden by the same function name further down """
     return _get_broken_resource_links(include_resources=include_resources)
 
 
 not_broken_but_0_stars = set(('Chose not to download',))
 archiver_status__not_broken_link = set(('Chose not to download', 'Archived successfully'))
 
-def organisation_score_summaries(include_sub_organisations=False):
+
+def organisation_score_summaries(include_sub_organisations=False, use_cache=True):
     '''Returns a list of all organisations with a summary of scores.
     Does SOLR query to be quicker.
     '''
+
+    if use_cache:
+        key = 'organisation_score_summaries'
+        if include_sub_organisations:
+            key = "".join([key, '-withsub'])
+        cache = model.DataCache.get_fresh("general", key)
+        if cache:
+            log.debug("Found organisation_score_summaries in cache")
+            return cache
+
     publisher_scores = []
     for publisher in model.Group.all(group_type='publisher'):
         if include_sub_organisations:
@@ -210,12 +237,12 @@ def organisation_score_summaries(include_sub_organisations=False):
             ('publisher_name', publisher.name),
             ('dataset_count', dataset_result['count']),
             ('TBC', score.get('-1', 0)),
-            (0, score.get('0', 0)),
-            (1, score.get('1', 0)),
-            (2, score.get('2', 0)),
-            (3, score.get('3', 0)),
-            (4, score.get('4', 0)),
-            (5, score.get('5', 0)),
+            ('0', score.get('0', 0)),
+            ('1', score.get('1', 0)),
+            ('2', score.get('2', 0)),
+            ('3', score.get('3', 0)),
+            ('4', score.get('4', 0)),
+            ('5', score.get('5', 0)),
             ))
         publisher_score['total_stars'] = sum([(score.get(str(i), 0) * i) for i in range(6)])
         publisher_score['average_stars'] = float(publisher_score['total_stars']) / publisher_score['dataset_count'] if publisher_score['dataset_count'] else 0
@@ -234,6 +261,9 @@ def scores_by_dataset_for_organisation(organisation_name):
       ...]
 
     '''
+
+    # TODO: Check the cache first, and return that if it is fresh enough
+
     values = {}
     sql = """
         select package.id as package_id,
@@ -248,13 +278,13 @@ def scores_by_dataset_for_organisation(organisation_name):
                "group".id as publisher_id,
                "group".name as publisher_name,
                "group".title as publisher_title
-        from task_status 
+        from task_status
             left join resource on task_status.entity_id = resource.id
             left join resource_group on resource.resource_group_id = resource_group.id
             left join package on resource_group.package_id = package.id
             left join member on member.table_id = package.id
             left join "group" on member.group_id = "group".id
-        where 
+        where
             entity_id in (select entity_id from task_status where task_status.task_type='archiver' and task_status.key='status' and value='0')
             and package.state = 'active'
             and resource.state='active'
@@ -297,26 +327,32 @@ def scores_by_dataset_for_organisation(organisation_name):
             res_data['openness_score_updated'] = row.task_status_last_updated
         last_row = row
     if res_data:
-        save_res_data(row, res_data, data)    
+        save_res_data(row, res_data, data)
 
     return {'publisher_name': row.publisher_name if data else organisation_name,
             'publisher_title': row.publisher_title if data else '',
             'broken_resources': data}
 
-def organisations_with_broken_resource_links(include_sub_organisations=False):
+def organisations_with_broken_resource_links(include_sub_organisations=False, use_cache=True):
     # get list of orgs that themselves have broken links
+
+    if use_cache:
+        val = _find_in_cache("general",'organisations_with_broken_resource_links', withsub=include_sub_organisations)
+        if val:
+            return val
+
     sql = """
         select count(distinct(package.id)) as broken_package_count,
                count(resource.id) as broken_resource_count,
                "group".name as publisher_name,
                "group".title as publisher_title
-        from task_status 
+        from task_status
             left join resource on task_status.entity_id = resource.id
             left join resource_group on resource.resource_group_id = resource_group.id
             left join package on resource_group.package_id = package.id
             left join member on member.table_id = package.id
             left join "group" on member.group_id = "group".id
-        where 
+        where
             entity_id in (select entity_id from task_status where task_status.task_type='archiver' and task_status.key='status' and %(status_filter)s)
             and task_status.key='status'
             and package.state = 'active'
@@ -348,7 +384,7 @@ def organisations_with_broken_resource_links(include_sub_organisations=False):
                     counts_by_publisher[publisher] = [0, 0]
                 counts_by_publisher[publisher][0] += row.broken_package_count
                 counts_by_publisher[publisher][1] += row.broken_resource_count
-            
+
         data = []
         for row in sorted(counts_by_publisher.items(), key=lambda x: x[0].title):
             row_data = OrderedDict((
@@ -361,7 +397,8 @@ def organisations_with_broken_resource_links(include_sub_organisations=False):
     return data
 
 def broken_resource_links_for_organisation(organisation_name,
-                                           include_sub_organisations=False):
+                                           include_sub_organisations=False,
+                                           use_cache=True):
     '''
     Returns a dictionary detailing broken resource links for the organisation
 
@@ -373,6 +410,11 @@ def broken_resource_links_for_organisation(organisation_name,
       ...]
 
     '''
+    if use_cache:
+        val = _find_in_cache(organisation_name, 'broken-link-report', withsub=include_sub_organisations)
+        if val:
+            return val
+
     values = {}
     sql = """
         select package.id as package_id,
@@ -388,13 +430,13 @@ def broken_resource_links_for_organisation(organisation_name,
                "group".id as publisher_id,
                "group".name as publisher_name,
                "group".title as publisher_title
-        from task_status 
+        from task_status
             left join resource on task_status.entity_id = resource.id
             left join resource_group on resource.resource_group_id = resource_group.id
             left join package on resource_group.package_id = package.id
             left join member on member.table_id = package.id
             left join "group" on member.group_id = "group".id
-        where 
+        where
             entity_id in (select entity_id from task_status where task_status.task_type='archiver' and task_status.key='status' and %(status_filter)s)
             and task_status.key='status'
             and package.state = 'active'
@@ -410,11 +452,13 @@ def broken_resource_links_for_organisation(organisation_name,
     org = model.Group.by_name(organisation_name)
     if not org:
         abort(404, 'Publisher not found')
+    organisation_title = org.title
+
     if not include_sub_organisations:
         sql_options['org_filter'] = 'and "group".name = :org_name'
         values['org_name'] = organisation_name
     else:
-        sub_org_filters = ['"group".name=\'%s\'' % org.name for org in go_down_tree(org)]
+        sub_org_filters = ['"group".name=\'%s\'' % organisation.name for organisation in go_down_tree(org)]
         sql_options['org_filter'] = 'and (%s)' % ' or '.join(sub_org_filters)
 
     item_properties_as_dates = set(('first_failure', 'last_success'))
@@ -442,14 +486,13 @@ def broken_resource_links_for_organisation(organisation_name,
         row_data['last_updated'] = row.task_status_last_updated
         data.append(row_data)
 
-    organisation_title = org.title
-
     return {'publisher_name': organisation_name,
             'publisher_title': organisation_title,
             'data': data}
 
 def organisation_dataset_scores(organisation_name,
-                                include_sub_organisations=False):
+                                include_sub_organisations=False,
+                                use_cache=True):
     '''
     Returns a dictionary detailing dataset openness scores for the organisation
 
@@ -461,6 +504,12 @@ def organisation_dataset_scores(organisation_name,
       ...]
 
     '''
+
+    if use_cache:
+        val = _find_in_cache(organisation_name, 'openness-report', withsub=include_sub_organisations)
+        if val:
+            return val
+
     values = {}
     sql = """
         select package.id as package_id,
@@ -481,7 +530,7 @@ def organisation_dataset_scores(organisation_name,
             left join package on resource_group.package_id = package.id
             left join member on member.table_id = package.id
             left join "group" on member.group_id = "group".id
-        where 
+        where
             entity_id in (select entity_id from task_status where task_status.task_type='qa')
             and package.state = 'active'
             and resource.state='active'
@@ -494,16 +543,17 @@ def organisation_dataset_scores(organisation_name,
     org = model.Group.by_name(organisation_name)
     if not org:
         abort(404, 'Publisher not found')
+    organisation_title = org.title        
 
     if not include_sub_organisations:
         sql_options['org_filter'] = 'and "group".name = :org_name'
         values['org_name'] = organisation_name
     else:
-        sub_org_filters = ['"group".name=\'%s\'' % org.name for org in go_down_tree(org)]
+        sub_org_filters = ['"group".name=\'%s\'' % organisation.name for organisation in go_down_tree(org)]
         sql_options['org_filter'] = 'and (%s)' % ' or '.join(sub_org_filters)
 
     rows = model.Session.execute(sql % sql_options, values)
-    data = {} # dataset_name: {properties}
+    data = dict() # dataset_name: {properties}
     for row in rows:
         package_data = data.get(row.package_name)
         if not package_data:
@@ -536,8 +586,76 @@ def organisation_dataset_scores(organisation_name,
 
         data[row.package_name] = package_data
 
-    organisation_title = org.title
+    # Sort the results by openness_score asc so we can see the worst
+    # results first
+    data = OrderedDict(sorted(data.iteritems(),
+        key=lambda x: x[1]['openness_score']))
 
     return {'publisher_name': organisation_name,
             'publisher_title': organisation_title,
             'data': data.values()}
+
+
+def cached_reports(reports_to_run=None):
+    """
+    Called via the ICachedReport plugin implemented in plugin.py
+    for pre-filling the cache with data for use at runtime
+    """
+    from ckan.lib.json import DateTimeJsonEncoder
+
+    local_reports = set(['broken-link-report', 'broken-link-report-withsub',
+                         'openness-report', 'openness-report-withsub',
+                         'organisation_score_summaries', 
+                         'organisations_with_broken_resource_links'])
+    if reports_to_run:
+      local_reports = set(reports_to_run) & local_reports
+
+    if not local_reports:
+      return
+
+    publishers = model.Session.query(model.Group).\
+        filter(model.Group.type=='publisher').\
+        filter(model.Group.state=='active')
+
+    if "organisations_with_broken_resource_links" in local_reports:
+        log.info("Generating organisations with broken resource links overview")
+        val = organisations_with_broken_resource_links(include_sub_organisations=False, use_cache=False)
+        model.DataCache.set("general", "organisations_with_broken_resource_links", json.dumps(val,cls=DateTimeJsonEncoder))
+        val = organisations_with_broken_resource_links(include_sub_organisations=True, use_cache=False)
+        model.DataCache.set("general", "organisations_with_broken_resource_links-withsub", json.dumps(val,cls=DateTimeJsonEncoder))
+
+    if 'organisation_score_summaries' in local_reports:
+        log.info("Generating organisation score summaries overview")
+
+        val = organisation_score_summaries(include_sub_organisations=False, use_cache=False)
+        model.DataCache.set("general", "organisation_score_summaries", json.dumps(val,cls=DateTimeJsonEncoder))
+
+        val = organisation_score_summaries(include_sub_organisations=True, use_cache=False)
+        model.DataCache.set("general", "organisation_score_summaries-withsub", json.dumps(val,cls=DateTimeJsonEncoder))
+
+    log.info("Fetching %d publishers" % publishers.count())
+
+    for publisher in publishers.all():
+        # Run the broken links report with and without include_sub_organisations set
+        if 'broken-link-report' in local_reports:
+            log.info("Generating broken link report for %s" % publisher.name)
+            val = broken_resource_links_for_organisation(publisher.name, use_cache=False)
+            model.DataCache.set(publisher.name, "broken-link-report", json.dumps(val,cls=DateTimeJsonEncoder))
+
+        if 'broken-link-report-withsub' in local_reports:
+            log.info("Generating broken link report for %s with sub-publishers" % publisher.name)
+            val = broken_resource_links_for_organisation(publisher.name, include_sub_organisations=True, use_cache=False)
+            model.DataCache.set(publisher.name, "broken-link-report-withsub", json.dumps(val,cls=DateTimeJsonEncoder))
+
+        # Run the openness report with and without include_sub_organisations set
+        if 'openness-report' in local_reports:
+            log.info("Generating openness report for %s" % publisher.name)
+            val = organisation_dataset_scores(publisher.name, use_cache=False)
+            model.DataCache.set(publisher.name, "openness-report", json.dumps(val,cls=DateTimeJsonEncoder))
+
+        if 'openness-report-withsub' in local_reports:
+            log.info("Generating openness report for %s with sub-publishers" % publisher.name)
+            val = organisation_dataset_scores(publisher.name, include_sub_organisations=True, use_cache=False)
+            model.DataCache.set(publisher.name, "openness-report-withsub", json.dumps(val,cls=DateTimeJsonEncoder))
+
+    model.Session.commit()
