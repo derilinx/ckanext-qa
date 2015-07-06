@@ -12,6 +12,7 @@ from ckan.lib.json import DateTimeJsonEncoder
 from ckanext.dgu.lib.formats import Formats
 from ckanext.qa.sniff_format import sniff_file_format
 from ckanext.archiver.model import Archival, Status
+from encoding import detect_encoding_of_an_archived_resource
 
 class QAError(Exception):
     pass
@@ -151,6 +152,10 @@ def resource_score(resource, log):
         archival = Archival.get_for_resource(resource_id=resource.id)
         if not resource:
             raise QAError('Could not find resource "%s"' % resource.id)
+
+        # as an aside, detect the record encoding
+        encoding, encoding_comment = detect_encoding_of_an_archived_resource(
+            archival, resource, log)
 
         score, format_ = score_if_link_broken(archival, resource, score_reasons, log)
         if score == None:

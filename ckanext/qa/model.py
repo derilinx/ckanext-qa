@@ -32,6 +32,7 @@ class QA(Base):
     openness_score = Column(types.Integer)
     openness_score_reason = Column(types.UnicodeText)
     format = Column(types.UnicodeText)
+    #encoding = Column(types.UnicodeText)
 
     created = Column(types.DateTime, default=datetime.now)
     updated = Column(types.DateTime)
@@ -50,6 +51,7 @@ class QA(Base):
         result['last_updated'] = self.created
 
         result['format'] = self.format
+        #result['encoding'] = self.encoding
         result['archiver_status'] = self.archiver_status
         result['reason'] = self.openness_score_reason
 
