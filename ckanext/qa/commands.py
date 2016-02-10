@@ -149,10 +149,17 @@ class QACommand(p.toolkit.CkanCommand):
             sys.exit(1)
 
         self.log.info('Queue: %s', self.options.queue)
-        for package in packages:
-            plugin.create_qa_update_package_task(package, self.options.queue)
-            self.log.info('Queuing dataset %s (%s resources)',
-                          package.name, len(package.resources))
+        count = 0
+        try:
+            for package in reversed(packages):
+                count += 1
+                print count
+                plugin.create_qa_update_package_task(package, self.options.queue)
+                self.log.info('Queuing dataset %s (%s resources)',
+                              package.name, len(package.resources))
+        except Exception, e:
+            self.log.error(e)
+            raise
 
         for resource in resources:
             package = resource.resource_group.package

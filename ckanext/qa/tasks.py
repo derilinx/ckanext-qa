@@ -148,19 +148,20 @@ def resource_score(resource, log):
 
     try:
         score_reasons = []  # a list of strings detailing how we scored it
-        archival = Archival.get_for_resource(resource_id=resource.id)
-        if not resource:
-            raise QAError('Could not find resource "%s"' % resource.id)
+        score = None
+        #archival = Archival.get_for_resource(resource_id=resource.id)
+        #if not resource:
+        #    raise QAError('Could not find resource "%s"' % resource.id)
 
-        score, format_ = score_if_link_broken(archival, resource, score_reasons, log)
+        #score, format_ = score_if_link_broken(archival, resource, score_reasons, log)
         if score == None:
             # we don't want to take the publisher's word for it, in case the link
             # is only to a landing page, so highest priority is the sniffed type
-            score, format_ = score_by_sniffing_data(archival, resource,
-                                                    score_reasons, log)
+            #score, format_ = score_by_sniffing_data(archival, resource,
+            #                                        score_reasons, log)
             if score == None:
                 # Fall-backs are user-given data
-                score, format_ = score_by_url_extension(resource, score_reasons, log)
+                #score, format_ = score_by_url_extension(resource, score_reasons, log)
                 if score == None:
                     score, format_ = score_by_format_field(resource, score_reasons, log)
                     if score == None:
@@ -184,7 +185,11 @@ def resource_score(resource, log):
     # It is important we do this check after the link check, otherwise
     # the link checker won't get the chance to see if the resource
     # is broken.
-    if score > 0 and not resource.resource_group.package.isopen():
+    if resource.resource_group.package.isopen():
+        if score == 0:
+            score = 1
+            score_reason = 'License is open'
+    else:
         score_reason = 'License not open'
         score = 0
 
@@ -194,7 +199,7 @@ def resource_score(resource, log):
         'openness_score': score,
         'openness_score_reason': score_reason,
         'format': format_,
-        'archival_timestamp': archival.updated if archival else None,
+        'archival_timestamp': None,
     }
 
     return result
@@ -368,10 +373,10 @@ def update_search_index(package_id, log):
     '''
     Tells CKAN to update its search index for a given package.
     '''
-    from ckan import model
-    from ckan.logic import get_action
-    context_ = {'model': model, 'ignore_auth': True, 'session': model.Session}
-    get_action('search_index_update')(context_, {'id': package_id})
+    #from ckan import model
+    #from ckan.logic import get_action
+    #context_ = {'model': model, 'ignore_auth': True, 'session': model.Session}
+    #get_action('search_index_update')(context_, {'id': package_id})
 
 
 def save_qa_result(resource_id, qa_result, log):

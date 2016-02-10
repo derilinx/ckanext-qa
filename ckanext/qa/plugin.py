@@ -62,7 +62,11 @@ class QAPlugin(p.SingletonPlugin):
 
     def receive_data(self, operation, queue, **params):
         '''Receive notification from ckan-archiver that a resource has been archived.'''
-        if not operation == 'archived':
+        # hack to avoid creating tasks after archiver has run
+	if operation == 'archived':
+            return
+        #this is usual
+	if not operation == 'archived':
             return
         resource_id = params['resource_id']
         #cache_filepath = params['cached_filepath']
@@ -102,17 +106,16 @@ class QAPlugin(p.SingletonPlugin):
         return [reports.openness_report_info]
 
 
+from pylons import config
+ckan_ini_filepath = os.path.abspath(config.__file__)
 def create_qa_update_package_task(package, queue):
-    from pylons import config
     task_id = '%s-%s' % (package.name, make_uuid()[:4])
-    ckan_ini_filepath = os.path.abspath(config.__file__)
     celery.send_task('qa.update_package', args=[ckan_ini_filepath, package.id],
                      task_id=task_id, queue=queue)
     log.debug('QA of package put into celery queue %s: %s', queue, package.name)
 
-
+from pylons import config
 def create_qa_update_task(resource, queue):
-    from pylons import config
     package = resource.resource_group.package
     task_id = '%s/%s/%s' % (package.name, resource.id[:4], make_uuid()[:4])
     ckan_ini_filepath = os.path.abspath(config.__file__)
