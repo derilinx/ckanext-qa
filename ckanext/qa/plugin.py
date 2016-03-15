@@ -61,20 +61,14 @@ class QAPlugin(p.SingletonPlugin):
     # IPipe
 
     def receive_data(self, operation, queue, **params):
-        '''Receive notification from ckan-archiver that a resource has been archived.'''
-        # hack to avoid creating tasks after archiver has run
-	if operation == 'archived':
-            return
-        #this is usual
-	if not operation == 'archived':
-            return
-        resource_id = params['resource_id']
-        #cache_filepath = params['cached_filepath']
+        '''Receive notification from ckan-archiver that a package has been updated.'''
+        if operation == 'package-updated':
+            package_id = params['package_id']
 
-        resource = model.Resource.get(resource_id)
-        assert resource
+            package = model.Package.get(package_id)
+            assert package
 
-        create_qa_update_task(resource, queue=queue)
+            create_qa_update_package_task(package, queue=queue)
 
     # IActions
 
