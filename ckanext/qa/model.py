@@ -92,6 +92,25 @@ class QA(Base):
         c.package_id = row[0]
         return c
 
+def aggregate_qa_for_a_dataset(qa_objs):
+    '''Returns aggregated archival info for a dataset, given the archivals for
+    its resources (returned by get_for_package).
+    :param qa_objs: A list of the QA objects for a dataset's resources
+    :type qa_objs: A list of QA objects
+    :returns: QA dict about the dataset, with keys:
+                openness_score
+                openness_score_reason
+    '''
+    qa_dict = {'openness_score': None, 'openness_score_reason': None}
+    for qa in qa_objs:
+        # openness_score takes the highest i.e. optimistic
+        # openness_score_reason matches the status_id
+        if qa_dict['openness_score'] is None or \
+                qa.openness_score > qa_dict['openness_score']:
+            qa_dict['openness_score'] = qa.openness_score
+            qa_dict['openness_score_reason'] = qa.openness_score_reason
+    return qa_dict
+
 def init_tables(engine):
     Base.metadata.create_all(engine)
     log.info('QA database tables are set-up')

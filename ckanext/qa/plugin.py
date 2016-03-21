@@ -8,7 +8,7 @@ from ckan.model.types import make_uuid
 
 from ckanext.archiver.interfaces import IPipe
 from ckanext.report.interfaces import IReport
-
+from ckanext.qa.model import QA, aggregate_qa_for_a_dataset
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ class QAPlugin(p.SingletonPlugin):
     p.implements(p.IActions)
     p.implements(p.IAuthFunctions)
     p.implements(IReport)
+    p.implements(p.IPackageController, inherit=True)
 
     # IConfigurer
 
@@ -99,6 +100,19 @@ class QAPlugin(p.SingletonPlugin):
         from ckanext.qa import reports
         return [reports.openness_report_info]
 
+    def after_show(self, context, pkg_dict):
+        # Insert the qa info into the package_dict so that it is
+        # available on the API.
+        # When you edit the dataset, these values will not show in the form,
+        # it they will be saved in the resources (not the dataset). I can't see
+        # and easy way to stop this, but I think it is harmless. It will get
+        # overwritten here when output again.
+        qa_objs = QA.get_for_package(pkg_dict['id'])
+        if not qa_objs:
+            return
+        # dataset
+        dataset_qa = aggregate_qa_for_a_dataset(qa_objs)
+        pkg_dict['qa'] = dataset_qa
 
 from pylons import config
 ckan_ini_filepath = os.path.abspath(config.__file__)
