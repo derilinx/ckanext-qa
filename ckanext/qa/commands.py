@@ -104,7 +104,7 @@ class QACommand(p.toolkit.CkanCommand):
         from ckanext.qa import plugin
         packages = []
         resources = []
-        if len(self.args) > 1:
+        if len(self.args) > 1 and (self.args[1] != 'first' and self.args[1] != 'second'):
             for arg in self.args[1:]:
                 # try arg as a group id/name
                 group = model.Group.get(arg)
@@ -135,8 +135,15 @@ class QACommand(p.toolkit.CkanCommand):
             # all packages
             pkgs = model.Session.query(model.Package)\
                         .filter_by(state='active')\
+                        .filter_by(type='dataset')\
                         .order_by('name').all()
             packages.extend(pkgs)
+            # hack to ensure that our server does not die
+            if len(self.args) > 1:
+                if self.args[1] == 'first':
+                    packages = packages[:len(packages)/2]
+                elif self.args[1] == 'second':
+                    packages = packages[len(packages)/2:]
             if not self.options.queue:
                 self.options.queue = 'bulk'
 
