@@ -135,6 +135,7 @@ class QACommand(p.toolkit.CkanCommand):
             # all packages
             pkgs = model.Session.query(model.Package)\
                         .filter_by(state='active')\
+                        .filter_by(type='dataset')\
                         .order_by('name').all()
             packages.extend(pkgs)
             # hack to ensure that our server does not die
