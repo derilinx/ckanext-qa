@@ -183,9 +183,9 @@ def resource_score(resource, log):
                                                     score_reasons, log)
             if score == None:
                 # Fall-backs are user-given data
-                score, format_ = score_by_url_extension(resource, score_reasons, log)
+                score, format_ = score_by_format_field(resource, score_reasons, log)
                 if score == None:
-                    score, format_ = score_by_format_field(resource, score_reasons, log)
+                    score, format_ = score_by_url_extension(resource, score_reasons, log)
                     if score == None:
                         log.warning('Could not score resource: "%s" with url: "%s"',
                                     resource.id, resource.url)
