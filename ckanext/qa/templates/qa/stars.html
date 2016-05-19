@@ -4,8 +4,10 @@ explaining the reason.
 
 stars  - The number of stars assigned to the dataset.
 reason - A reason why the dataset doesn't have a rating.
+zero_text - Boolean value to show, or not, text for zero scoring in order to avoid confusion with 5 stars
 
-    {% snippet "qa/stars.html", stars=4 %}
+
+    {% snippet "qa/stars.html", stars=4, zero_text=False %}
 
 #}
 <span class="star-rating{% if stars == 0 %} no-stars{% endif %}">
@@ -19,7 +21,7 @@ reason - A reason why the dataset doesn't have a rating.
       {%- for index in range(5-stars) -%}
         <span class="icon icon-star-empty"></span>
       {%- endfor -%}
-      {%- if stars == 0 -%}
+      {%- if stars == 0 and zero_text -%}
         {# 0 stars looks awfully like 5 stars, so be explicit #}
         (0 out of 5)
       {%- endif -%}

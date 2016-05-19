@@ -2,6 +2,7 @@
 Provide some Quality Assurance by scoring datasets against Sir Tim
 Berners-Lee\'s five stars of openness
 '''
+import logging
 import datetime
 import json
 import os
@@ -14,6 +15,7 @@ from ckanext.qa.sniff_format import sniff_file_format
 from ckanext.qa import lib
 from ckanext.archiver.model import Archival, Status
 
+log = logging.getLogger('ckanext.qa')
 
 class QAError(Exception):
     pass
@@ -62,7 +64,6 @@ def update_package(ckan_ini_filepath, package_id):
 
     Returns None
     """
-    log = update_package.get_logger()
     load_config(ckan_ini_filepath)
     register_translator()
     from ckan import model
@@ -99,7 +100,6 @@ def update(ckan_ini_filepath, resource_id):
         'openness_score': score (int)
         'openness_score_reason': the reason for the score (string)
     """
-    log = update.get_logger()
     load_config(ckan_ini_filepath)
     register_translator()
     from ckan import model
