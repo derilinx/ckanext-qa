@@ -9,7 +9,7 @@ from ckanext.qa.logic import action, auth
 from ckanext.qa.model import QA, aggregate_qa_for_a_dataset
 from ckanext.qa import helpers
 from ckanext.qa import lib
-from ckanext.report.interfaces import IReport
+#from ckanext.report.interfaces import IReport
 
 
 log = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class QAPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
     p.implements(p.IConfigurer, inherit=True)
     p.implements(p.IRoutes, inherit=True)
     p.implements(IPipe, inherit=True)
-    p.implements(IReport)
+    #p.implements(IReport)
     p.implements(p.IActions)
     p.implements(p.IAuthFunctions)
     p.implements(p.ITemplateHelpers)
@@ -58,10 +58,10 @@ class QAPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
 
     # IReport
 
-    def register_reports(self):
-        """Register details of an extension's reports"""
-        from ckanext.qa import reports
-        return [reports.openness_report_info]
+    #def register_reports(self):
+    #    """Register details of an extension's reports"""
+    #    from ckanext.qa import reports
+    #    return [reports.openness_report_info]
 
     # IActions
 
