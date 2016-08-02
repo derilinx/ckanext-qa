@@ -121,12 +121,8 @@ def create_qa_update_package_task(package, queue):
     celery.send_task('qa.update_package', args=[ckan_ini_filepath, package.id],
                      task_id=task_id, queue=queue)
     log.debug('QA of package put into celery queue %s: %s', queue, package.name)
-
-from pylons import config
 def create_qa_update_task(resource, queue):
-    package = resource.resource_group.package
     task_id = '%s/%s/%s' % (package.name, resource.id[:4], make_uuid()[:4])
-    ckan_ini_filepath = os.path.abspath(config.__file__)
     celery.send_task('qa.update', args=[ckan_ini_filepath, resource.id],
                      task_id=task_id, queue=queue)
-    log.debug('QA of resource put into celery queue %s: %s/%s url=%r', queue, package.name, resource.id, resource.url)
+    log.debug('QA of resource put into celery queue %s: %s url=%r', queue, resource.id, resource.url)

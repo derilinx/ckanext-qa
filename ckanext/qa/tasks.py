@@ -386,10 +386,10 @@ def update_search_index(package_id, log):
     '''
     Tells CKAN to update its search index for a given package.
     '''
-    #from ckan import model
-    #from ckan.logic import get_action
-    #context_ = {'model': model, 'ignore_auth': True, 'session': model.Session}
-    #get_action('search_index_update')(context_, {'id': package_id})
+    from ckan import model
+    from ckan.logic import get_action
+    context_ = {'model': model, 'ignore_auth': True, 'session': model.Session}
+    get_action('search_index_update')(context_, {'id': package_id})
 
 
 def save_qa_result(resource_id, qa_result, log):

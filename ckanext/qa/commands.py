@@ -158,7 +158,7 @@ class QACommand(p.toolkit.CkanCommand):
         self.log.info('Queue: %s', self.options.queue)
         count = 0
         try:
-            for package in reversed(packages):
+            for package in packages:
                 count += 1
                 print count
                 plugin.create_qa_update_package_task(package, self.options.queue)
@@ -274,3 +274,4 @@ class QACommand(p.toolkit.CkanCommand):
         model.Session.flush()
         model.Session.remove()
         print 'Migration succeeded'
+
