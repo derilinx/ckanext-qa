@@ -344,7 +344,7 @@ def extension_variants(url):
 
 def unzip_format(format_field):
     zip = '+ZIP'
-    if zip in format_field:
+    if (zip in format_field) or (zip.lower() in format_field):
         format_field = format_field.replace(zip, '')
         format_field = format_field.replace(zip.lower(), '')
 
