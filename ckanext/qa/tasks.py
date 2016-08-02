@@ -342,15 +342,6 @@ def extension_variants(url):
     return results
 
 
-def unzip_format(format_field):
-    zip = '+ZIP'
-    if (zip in format_field) or (zip.lower() in format_field):
-        format_field = format_field.replace(zip, '')
-        format_field = format_field.replace(zip.lower(), '')
-
-    return format_field
-
-
 def score_by_format_field(resource, score_reasons, log):
     '''
     Looks at the format field of a resource to determine its format and score.
@@ -367,9 +358,6 @@ def score_by_format_field(resource, score_reasons, log):
         score_reasons.append('Format field is blank.')
         return (None, None)
 
-
-    # get stars for content format of zip if zipped format, e.g csv+zip
-    format_field = unzip_format(format_field)
     format_ = Formats.by_display_name().get(format_field) or \
               Formats.by_extension().get(format_field.lower()) or \
               Formats.by_reduced_name().get(Formats.reduce(format_field))
