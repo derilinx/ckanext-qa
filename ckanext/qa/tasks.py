@@ -357,6 +357,7 @@ def score_by_format_field(resource, score_reasons, log):
     if not format_field:
         score_reasons.append('Format field is blank.')
         return (None, None)
+
     format_ = Formats.by_display_name().get(format_field) or \
               Formats.by_extension().get(format_field.lower()) or \
               Formats.by_reduced_name().get(Formats.reduce(format_field))
