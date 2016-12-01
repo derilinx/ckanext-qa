@@ -9,5 +9,6 @@ sudo -u www-data /home/co/ckan/bin/paster --plugin=ckanext-archiver celeryd clea
 
 sudo -u www-data /home/co/ckan/bin/paster --plugin=ckanext-qa qa update first --queue=qa-daily --config=/var/ckan/ckan.ini
 sudo -u www-data /home/co/ckan/bin/paster --plugin=ckanext-qa qa update second --queue=qa-daily --config=/var/ckan/ckan.ini
+sudo -u www-data /home/co/ckan/bin/paster --plugin=ckanext-qa qa update third --queue=qa-daily --config=/var/ckan/ckan.ini
 
 sudo -u www-data /home/co/ckan/bin/paster --plugin=ckan celeryd run --queue=qa-daily --config=/var/ckan/ckan.ini 
